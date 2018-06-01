@@ -19,7 +19,7 @@ from unittest import TestCase
 # produce a typical KMeans output
 from sklearn.cluster import KMeans
 
-from ikats.algo.core.kmeans.kmeans import fit_kmeans
+from ikats.algo.op-kmeans.kmeans import fit_kmeans
 from ikats.core.library.exception import IkatsInputTypeError
 
 

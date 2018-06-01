@@ -15,7 +15,7 @@ limitations under the License.
 
 """
 import logging
-from ikats.algo.core.kmeans import fit_kmeans_internal, mds_representation_kmeans, format_kmeans
+from ikats.algo.op-kmeans import fit_kmeans_internal, mds_representation_kmeans, format_kmeans
 from ikats.core.library.exception import IkatsInputTypeError, IkatsInputContentError
 
 """
@@ -37,7 +37,7 @@ from ikats.core.library.exception import IkatsInputTypeError, IkatsInputContentE
         The inputs must be normalised !
 
     .. note::
-        This code is very close to ikats.algo.core.kmeans.kmeans !
+        This code is very close to ikats.algo.op-kmeans.kmeans !
 """
 # Help page : http://scikit-learn.org/stable/modules/generated/sklearn.cluster.KMeans.html
 
