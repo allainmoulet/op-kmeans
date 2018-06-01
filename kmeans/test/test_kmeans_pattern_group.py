@@ -18,7 +18,7 @@ from unittest import TestCase
 import logging
 # produce a typical KMeans output
 from sklearn.cluster import KMeans
-from ikats.algo.op-kmeans.kmeans_pattern_group import fit_kmeans_pattern_group, LOG_SK_KMEANS
+from ikats.algo.kmeans.kmeans_pattern_group import fit_kmeans_pattern_group, LOG_SK_KMEANS
 from ikats.core.library.exception import IkatsInputTypeError, IkatsInputContentError
 
 """
