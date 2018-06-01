@@ -10,7 +10,7 @@
     "label": "K-Means",
     "description": "Apply a K-means clustering on the results of a SAX algorithm",
     "algorithm": "kmeans",
-    "entry_point": "ikats.algo.core.kmeans::fit_kmeans",
+    "entry_point": "op-kmeans::fit_kmeans",
     "inputs": [
       {
         "name": "sax",
