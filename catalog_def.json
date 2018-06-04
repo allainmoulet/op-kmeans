@@ -7,7 +7,7 @@
   },
   {
     "name": "kmeans",
-    "label": "K-Means",
+    "label": "K-Means on SAX",
     "description": "Apply a K-means clustering on the results of a SAX algorithm",
     "algorithm": "kmeans",
     "entry_point": "ikats.algo.core.kmeans::fit_kmeans",
