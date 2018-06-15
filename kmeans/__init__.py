@@ -17,6 +17,6 @@ limitations under the License.
 # Simplify the import patterns for user
 
 from pkgutil import extend_path
-from ikats.algo.core.kmeans.kmeans import fit_kmeans_internal, mds_representation_kmeans, format_kmeans, fit_kmeans
-from ikats.algo.core.kmeans.kmeans_pattern_group import fit_kmeans_pattern_group
+from ikats.algo.kmeans.kmeans import fit_kmeans_internal, mds_representation_kmeans, format_kmeans, fit_kmeans
+from ikats.algo.kmeans.kmeans_pattern_group import fit_kmeans_pattern_group
 __path__ = extend_path(__path__, __name__)
