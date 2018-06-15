@@ -1,0 +1,38 @@
+{
+  "name": "kmeans",
+  "label": "K-Means on SAX",
+  "description": "Apply a K-means clustering on the results of a SAX algorithm",
+  "family": "Data_Modeling__Unsupervised_Learning",
+  "entry_point": "ikats.algo.kmeans.kmeans::fit_kmeans",
+  "inputs": [
+    {
+      "name": "sax",
+      "label": "SAX",
+      "description": "SAX result to clusterize",
+      "type": "SAX_result"
+    }
+  ],
+  "parameters": [
+    {
+      "name": "n_cluster",
+      "label": "clusters",
+      "description": "The number of clusters to form, as well as the number of centroids to generate",
+      "type": "number",
+      "default_value": 3
+    }
+  ],
+  "outputs": [
+    {
+      "name": "model",
+      "label": "Model",
+      "description": "The computed KMeans model",
+      "type": "sk_model"
+    },
+    {
+      "name": "result",
+      "label": "Result",
+      "description": "K-means Clustering results",
+      "type": "kmeans_mds"
+    }
+  ]
+}
