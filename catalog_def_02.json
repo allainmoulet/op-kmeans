@@ -1,5 +1,5 @@
 {
-  "name": "kmeans_patten",
+  "name": "kmeans_pattern",
   "label": "K-Means on patterns",
   "description": "Apply a K-means clustering on pattern groups.",
   "family": "Data_Modeling__Unsupervised_Learning",
