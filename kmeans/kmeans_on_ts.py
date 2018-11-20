@@ -14,282 +14,283 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 """
-from ikats.core.library.spark import SSessionManager, SparkUtils
-from ikats.core.resource.api import IkatsApi
-
 import time
 import numpy as np
 import logging
+
+from ikats.core.library.spark import SSessionManager, SparkUtils
+from ikats.core.resource.api import IkatsApi
+from ikats.core.library.exception import IkatsException
+
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import euclidean_distances
 from sklearn.manifold import MDS
 
-from ikats.core.library.exception import IkatsException, IkatsInputTypeError
 from pyspark.ml.clustering import KMeans as KMeansSpark
 from pyspark.ml.linalg import Vectors
 
 LOGGER = logging.getLogger(__name__)
 
-# def crash_test(nb_ts, length_ts, nb_clu):
-#     a = np.random.rand(nb_ts, length_ts)
-#     model = KMeans(nb_clu)
-#     model.fit(a)
-#     return model.labels_
 
-# TODO: 1 - AJUSTER le modèle - Partie sklearn
-def fit_kmeans_sklearn_internal(ts_list, n_cluster, random_state=None):
+def fit_kmeans_sklearn_internal(ts_list, n_cluster, random_state_kmeans=None):
     """
     The internal wrapper to fit K-means on time series with scikit-learn.
 
-    :param data: the dataset
-    :type data : a list of dicts
+    :param ts_list: the time series to cluster
+    :type ts_list: list of dicts
 
-    :param n_cluster: theumber of clusters to form
+    :param n_cluster: the number of clusters to form
     :type n_cluster: int
 
-    :param random_state: the seed used by the random number generator (if int)
+    :param random_state_kmeans: the seed used by the random number generator (if int) to make the results reproducible
     If None, the random number generator is the RandomState instance used by np.random
-    :type random_state: int or NoneType
-    .. note:: specify `random_state` to make the results reproducible
+    :type random_state_kmeans: int or NoneType
 
-    :return model: The KMeans model fitted on the input data-set
-    :rtype model: sklearn.cluster.k_means_.KMeans
-
-    :raises IkatsException: error occurred.
+    :return a tuple of those 2 elements:
+        model: The KMeans model fitted on the input 'ts_list'
+        data: Only the values of the time series extracted from ts_list
+    :rtype
+        model: sklearn.cluster.k_means_.KMeans
+        data: numpy.ndarray
     """
     LOGGER.info(" --- Starting K-Means fit with scikit-learn --- ")
     try:
+        start_loading_time = time.time()
         # -------------------------------------------------------------
         # 1 - Process the data in the shape needed by sklearn's K-Means
         # -------------------------------------------------------------
         data = []
         for i in ts_list:
-            startLoadingTime = time.time()
             # Read TS from it's TSUID; shape = (2, nrow)
             ts_data = IkatsApi.ts.read([i['tsuid']])[0]
-            LOGGER.debug("TSUID: %s, Gathering time: %.3f seconds", i, time.time() - startLoadingTime)
-            lisTS = [i[1] for i in ts_data]
-            data.append(lisTS)
-        datArray = np.array(data)
-        # TODO : Ce bout de code est réutilisé pour être le point d'entrée de MDS
-
+            list_ts = [i[1] for i in ts_data]
+            data.append(list_ts)
+        data = np.array(data)
         # ---------------------
         # 2 - Fit the algorithm
         # ---------------------
-        # TODO: Attention : de base, c'est la distance euclidienne qui est utilisée dans sklearn. Incorporer DTW ?
-        model = KMeans(n_clusters=n_cluster, random_state=random_state)
-        model.fit(datArray)
-        LOGGER.info(" --- Finished fitting K-Means to data --- ")
-        # --------------------------------
-        # 3 - Display the labels clustered
-        # --------------------------------
-        LOGGER.info(" --- Exporting results to sklearn.cluster.KMeans format --- ")
-        return model
+        model = KMeans(n_clusters=n_cluster, random_state=random_state_kmeans)
+        model.fit(data)
+        LOGGER.debug(" --- Finished fitting K-Means to data in: %.3f seconds --- ", time.time() - start_loading_time)
+        return model, data
     except Exception:
         msg = "Unexpected error: fit_kmeans_sklearn_internal(..., {}, {}, {})"
-        raise IkatsException(msg.format(ts_list, n_cluster, random_state))
+        raise IkatsException(msg.format(ts_list, n_cluster, random_state_kmeans))
+
 
 # TODO: 1bis - AJUSTER le modèle - Partie Spark
-def fit_kmeans_spark_internal(ts_list, n_cluster, random_state=None):
+def fit_kmeans_spark_internal(ts_list, n_cluster, random_state_kmeans=None):
     """
-    The internal wrapper to fit K-means on time series with Spark.
+    The internal wrapper to fit K-means on time series with Spark
 
-    :param data: The data-set : key (TS id), values (list of floats)
-    :type data : list of dicts
+    :param ts_list: the time series to cluster
+    :type ts_list: list of dicts
 
-    :param n_cluster: Number of clusters to form as well as the number of centroids to generate
+    :param n_cluster: the number of clusters to form
     :type n_cluster: int
 
-    :param random_state: The seed used by the random number generator (if int).
-    If None, the random number generator is the RandomState instance used by np.random.
-    :type random_state: int or NoneType
+    :param random_state_kmeans: the seed used by the random number generator (if int) to make the results reproducible
+    If None, the random number generator is the RandomState instance used by np.random
+    :type random_state_kmeans: int or NoneType
 
-    .. note:: specify `random_state` to make the results reproducible.
+    :return a tuple of those 3 elements:
+        model: The KMeans model fitted on the input 'ts_list'
+        data: Only the values of the time series extracted from ts_list
+        result: list of Row Spark objects with predictions
 
-    :return model: The KMeans model fitted on the input data-set.
-    :rtype model:
-
-    :raises IkatsException: error occurred.
+    :rtype
+        model: pyspark.ml.clustering.KMeansModel
+        data: numpy.ndarray
+        result: list of pyspark.sql.types.Row
     """
     SSessionManager.get()
     spark = SSessionManager.spark_session
     spark.sparkContext.setLogLevel('WARN')
-    LOGGER.info(" --- Starting K-Means fit with Spark --- ")
+    LOGGER.info("--- Starting K-Means fit with Spark ---")
     try:
+        start_loading_time = time.time()
         # -----------------------------------------------------------
         # 1 - Process the data in the shape needed by Spark's K-Means
         # -----------------------------------------------------------
         # Perform operation iteratively on each TS
+        data_spark = []
+        # Build of data for
         data = []
         for i in ts_list:
-            startLoadingTime = time.time()
             # Read TS from it's TSUID; shape = (2, nrow)
             ts_data = IkatsApi.ts.read([i['tsuid']])[0]
-            LOGGER.debug("TSUID: %s, Gathering time: %.3f seconds", i, time.time() - startLoadingTime)
-            lisTS = [x[1] for x in ts_data]
-            vecTS = Vectors.dense(lisTS)
-            data.append((vecTS,))
-        dataDf = spark.createDataFrame(data, ['time_series'])
+            list_ts = [x[1] for x in ts_data]
+            vec_ts = Vectors.dense(list_ts)
+            data_spark.append((vec_ts,))
+            data.append(list_ts)
+        data_df = spark.createDataFrame(data_spark, ['time_series'])
+        data = np.array(data)
         # ---------------------
         # 2 - Fit the algorithm
         # ---------------------
-        # TODO: Attention : de base, c'est la distance euclidienne qui est utilisée dans pySpark. Incorporer DTW ?
-        kmeanSpark = KMeansSpark(featuresCol='time_series', k=2, seed=random_state)
-        modelSpark = kmeanSpark.fit(dataDf)
-        LOGGER.info(" --- Finished fitting K-Means to data --- ")
+        kmeans_spark = KMeansSpark(featuresCol='time_series', k=2, seed=random_state_kmeans)
+        model_spark = kmeans_spark.fit(data_df)
+        LOGGER.info("--- Finished fitting K-Means to data ---")
         # --------------------------------
         # 3 - Display the labels clustered
         # --------------------------------
-        LOGGER.info(" --- Exporting results to suitable format ---")
-        transformed = modelSpark.transform(dataDf).select('time_series', 'prediction')
+        LOGGER.info("--- Exporting results to suitable format ---")
+        transformed = model_spark.transform(data_df).select('time_series', 'prediction')
         result = transformed.collect()
-        return modelSpark, result
+        LOGGER.info("--- Finished to export the results ---")
+        LOGGER.debug(" --- Finished fitting K-Means to data in: %.3f seconds --- ", time.time() - start_loading_time)
+        return model_spark, data, result
     except Exception:
         msg = "UNEXPECTED ERROR in fit_kmeans_spark_internal(..., {}, {}, {})"
-        raise IkatsException(msg.format(ts_list, n_cluster, random_state))
+        raise IkatsException(msg.format(ts_list, n_cluster, random_state_kmeans))
     finally:
         SSessionManager.stop()
 
 
-# TODO : 2 - TRANSFORMER les résultats.
-# TODO : Améliorer cette étape avec t-SNE (voir marque-page). Sparkisation ?
-# TODO :  Incorporation au code de kmeans pour ne pas répéter certaines parties
-def mds_representation_kmeans(fitted_model, ts_list, random_state_mds=None):
+# TODO : Améliorer cette étape avec t-SNE (voir marque-page)
+# TODO: Sparkisation ?
+def mds_representation_kmeans(fitted_model, data, random_state_mds=None):
     """
     Compute the MultiDimensional Scaling (MDS) transformation to the K-Means results.
     Purpose: a two dimensional representation of the clustering.
 
-    :param fit_model: The K-Means fitted model.
-    :type fit_model: sklearn.cluster.k_means_.KMeans
+    :param fitted_model: The K-Means fitted model with scikit-learn or Spark
+    :type fitted_model: sklearn.cluster.k_means_.KMeans OR pyspark.ml.clustering.KMeansModel
 
-    :param data: The initial data-set (ex: the paa obtained after *back_transform_sax*
-    :type data: table
+    :param data: the time series returned by the K-Means step
+    :type data: numpy.ndarray
 
-    :param random_state_mds: The seed used by the random number generator (if int).
-    If None, the random number generator is the RandomState instance used by np.random.
+    :param random_state_mds: the seed used by the random number generator (if int) to make the results reproducible
+    If None, the random number generator is the RandomState instance used by np.random
     :type random_state_mds: int or NoneType
 
-    .. note:: specify `random_state_mds` to make the results reproducible.
-
-    :return tuple of results :
-        mds: multidimensional scaling algorithm result (2 dimensional representation for the visualisation)
-        pos: the position (x,y) of the initial data-set after an mds transformation
-        centers_pos: the position (x,y) of the centroids after an mds transformation
-    :rtype : sklearn.manifold.mds.MDS, numpy array, numpy array
+    :return
+        mds: The result of the MultiDimensional Scaling algorithm in 2 dimensions for the visualisation
+        pointsPosition: The position (x, y) of the initial dataset after the MDS transformation
+        centroidsPosition: The position (x, y) of the centroids after the MDS transformation
+    :rtype tuple with
+        mds: sklearn.manifold.mds.MDS,
+        pointsPosition: numpy.ndarray
+        centroidsPosition: numpy.ndarray
     """
-    LOGGER.info("Starting MultiDimensional Scaling (MDS) transformation ...")
+    LOGGER.info("--- Starting MultiDimensional Scaling (MDS) transformation ---")
     try:
         # -------------------------------------------------------------
         # 1 - Process the data in the shape needed by sklearn's K-Means
         # -------------------------------------------------------------
-        data = []
-        for i in ts_list:
-            startLoadingTime = time.time()
-            # Read TS from it's TSUID; shape = (2, nrow)
-            ts_data = IkatsApi.ts.read([i['tsuid']])[0]
-            LOGGER.debug("TSUID: %s, Gathering time: %.3f seconds", i, time.time() - startLoadingTime)
-            lisTS = [i[1] for i in ts_data]
-            data.append(lisTS)
-        datArray = np.array(data)
+        if fitted_model.__module__ == 'pyspark.ml.clustering':
+            centroids = np.array(fitted_model.clusterCenters())
+        elif fitted_model.__module__ == 'sklearn.cluster.k_means_':
+            centroids = fitted_model.cluster_centers_
+        nb_clusters = len(centroids)
+
         # Addition of the centroids
-        datArrayCentroids = np.concatenate((datArray, fitted_model.cluster_centers_))
+        data_array_centroids = np.concatenate((data, centroids))
         # ----------------------------------------------------------------
         # 2 - Compute the matrice with Euclidian distances between each TS
         # ----------------------------------------------------------------
-        matDist = euclidean_distances(datArrayCentroids)
+        mat_dist = euclidean_distances(data_array_centroids)
         # ----------------------------------------------------------------
         # 3 - Compute the Multidimensional scaling (MDS)
         # ----------------------------------------------------------------
-        # TODO : Voir la pertinence de ces paramètres (et des autres), surtout dissimilarity
         mds = MDS(n_components=2, dissimilarity='precomputed', random_state=random_state_mds)
-        position = mds.fit_transform(matDist)
+        position = mds.fit_transform(mat_dist)
         a = len(position)
         # -----------------------------------------------------------
         # 4 - Separate the result for the TS-centroids and for the TS
         # -----------------------------------------------------------
         # Positions of the centroids are in the *n_clusters* last lines of the table
-        centroidsPosition = position[range(a - fitted_model.n_clusters, a)]
+        centroids_position = position[range(a - nb_clusters, a)]
         # Points position of each point of the initial data-set (without the position of the centroids)
-        pointsPosition = position[range(0, a - fitted_model.n_clusters)]
-        LOGGER.info("   ... finished MDS transformation")
-        return mds, pointsPosition, centroidsPosition
+        points_position = position[range(a - nb_clusters)]
+        LOGGER.info("--- Finished MDS transformation ---")
+        return mds, points_position, centroids_position
     except Exception:
         msg = "Unexpected error: mds_representation_kmeans(..., {}, {}, {})"
-        raise IkatsException(msg.format(fitted_model, ts_list, random_state_mds))
+        raise IkatsException(msg.format(fitted_model, data, random_state_mds))
 
 
-# TODO : 3 - FORMATER les résultats
-def format_kmeans(centers_pos, pos, tsuid_list, model):
+def format_kmeans(result_mds, ts_list, result_kmeans):
     """
     Build the output of the algorithm (dict) according to the catalog.
 
-    :param centers_pos: The position (x,y) of all the centroids after an mds transformation (list of pairs).
-    :type centers_pos: list
+    :param result_mds: The result obtained after the MDS transformation with:
+        the MDS model used
+        the position (x, y) of all the centroids and after the MDS transformation
+        the position (x, y) of all the points after the MDS transformation
+    :type result_mds: tuple
 
-    :param pos: The position of all the points (x, y) of the data-set after an mds transformation (n * 2 matrix).
-    :type pos: list
+    :param ts_list: List of all the TSUID
+    :type ts_list: list of dicts
 
-    :param model: The K-Means model used.
-    :type model: sklearn.cluster.k_means_.KMeans
+    :param result_kmeans: The result obtained at the K-Means step
+    :type result_kmeans: a tuple with those 3 elements:
+        model: sklearn.cluster.k_means_.KMeans OR pyspark.ml.clustering.KMeansModel
+        data: numpy.ndarray
+        result: list of pyspark.sql.types.Row
 
-    :param tsuid_list: List of all the TSUID
-    :type tsuid_list: list
-
-    :return: dict formatted as awaited (tsuid, mds new coords of each point, centroid coords)
-    :rtype: dict
+    :return: dict formatted as shown below, with: tsuid, mds new coordinates of each point, mds centroid coordinates
+    :rtype: dict of dicts
     """
-    LOGGER.info("Exporting results to the K-Means format ...")
-
-    # Example of the dict *result*:
+    # Example of obtained result:
     # {
-    #   "C1": {
-    #    "centroid": [x,y],
-    #    "*tsuid1*": [x,y],
-    #    "*tsuid2*": [x,y]
+    #   'C1': {
+    #    'centroid': [x, y],
+    #    '*tsuid1*': [x, y],
+    #    '*tsuid2*': [x, y]
     #   },
-    #   "C2" : ...
+    #   'C2': {
+    #   ...
+    #   }
     # }
+    LOGGER.info("--- Exporting results to the wanted format ---")
+    try:
+        if result_kmeans[0].__module__ == 'pyspark.ml.clustering':
+            # Get the predictions in a list
+            pred_list = []
+            for i in result_kmeans[2]:
+                pred_list.append(i['prediction'])
+                predictions = np.array(pred_list, dtype=np.int32)
+        elif result_kmeans[0].__module__ == 'sklearn.cluster.k_means_':
+            predictions = result_kmeans[0].labels_
 
-    # Initializing result structure
-    result = dict()
+        nb_clusters = result_kmeans[1].shape[1]
+        pos = result_mds[1]
+        centroids_pos = result_mds[2]
+        result = {}
+        # For each cluster
+        for i in range(nb_clusters):
+            center_label = 'C' + str(i + 1)
+            result[center_label] = {}
+            # Position of the centroid: 'centroid': [x, y]
+            result[center_label]['centroid'] = list(centroids_pos[i])
+            # For each time serie of the input data
+            for j in range(len(ts_list)):
+                # If the point is in the current cluster
+                if predictions[j] == i:
+                    # Position of this point: 'tsuid': [x, y]
+                    result[center_label][ts_list[j]['tsuid']] = list(pos[j])
+        LOGGER.info("--- Finished to import the results ---")
+        return result
+    except Exception:
+        msg = "Unexpected error: format_kmeans(result_mds, ts_list, result_kmeans)(..., {}, {}, {})"
+        raise IkatsException(msg.format(result_mds, ts_list, result_kmeans))
 
-    # For each cluster
-    for center in range(1, model.n_clusters + 1):
 
-        center_label = "C" + str(center)  # "C1", "C2",...
-
-        result[center_label] = {}  # result["C1"] = ...
-
-        # position of the centroid : {"C1": {"centroid": [x,y]}}
-        #
-        result[center_label]["centroid"] = list(centers_pos[center - 1])
-
-        # position of each point of the data-set : {"C1": {"*tsuid1*": [x,y], ... }}
-        #
-
-        # For each points of the data-set:
-        for index in range(0, len(tsuid_list)):
-            # if the data is in the current cluster
-            if model.labels_[index] == center - 1:
-                # position of the data : "*tsuid1*": [x,y]
-                result[center_label][tsuid_list[index]] = list(pos[index])
-    return result
-
-# TODO : Main
-def fit_kmeans_on_ts(data, nb_clusters, random_state=None, nb_points_by_chunk=50000, spark=None):
+def fit_kmeans_on_ts(ts_list, nb_clusters, random_state=None, nb_points_by_chunk=50000, spark=None):
     """
     Performs K-means algorithm on time series either with Spark either with scikit-learn.
 
-    :param data: List of TS to cluster
-    :type data: List of dict
+    :param ts_list: The time series to be clustered
+    :type ts_list: list of dicts
 
-    :param nb_clusters: Number of clusters of the Kmeans
+    :param nb_clusters: The number of clusters of the K-means model
     :type nb_clusters: int
 
     :param random_state: Used for results reproducibility
     :type random_state: int
 
-    :param nb_points_by_chunk: size of chunks in number of points
+    :param nb_points_by_chunk: The size of chunks in number of points
     (assuming time series is periodic and without holes)
     :type nb_points_by_chunk: int
 
@@ -299,32 +300,58 @@ def fit_kmeans_on_ts(data, nb_clusters, random_state=None, nb_points_by_chunk=50
         * case None: Spark usage is checked (function of amount of data)
     :type spark: bool or NoneType
 
-    :return tuple of results : model, km
-        model: The K-Means model used.
-        km: results summarized into a dict (see format_kmeans() ).
+    :return
+        kmeans: The K-Means model used
+        result: The obtained clusters with centroids and time series
+    :rtype
+        kmeans: Depends if Spark or scikit-learn has been used : sklearn.cluster.k_means_.KMeans
+            or pyspark.ml.clustering.KMeansModel
+        result: dict of dicts
     """
+    # --------------------
+    # 0 - Check the inputs
+    # --------------------
+    # Argument `ts_list`
+    if type(ts_list) is not list:
+        raise TypeError("TYPE ERROR: type of argument `ts_list` is {}, expected 'list'".format(type(ts_list)))
+    elif not ts_list:
+        raise ValueError("VALUE ERROR: argument `ts_list` is empty")
+    # Argument `nb_clusters`
+    if type(nb_clusters) is not int:
+        raise TypeError("TYPE ERROR: type of argument `nb_clusters` is {}, expected 'int'".format(type(nb_clusters)))
+    elif not nb_clusters or nb_clusters < 1:
+        raise ValueError("VALUE ERROR: argument `nb_clusters` must be an integer greater than 1")
+    # Argument `random_state`
+    if type(random_state) is not int and random_state is not None:
+        raise TypeError("TYPE ERROR: type of argument `random_state` is {}, expected 'int' or 'NoneType'".format(type(random_state)))
+    elif type(random_state) is int and random_state < 0:
+        raise ValueError("VALUE ERROR: argument `random_state` must be a positive integer")
+    # Argument `nb points by chunk`
+    if type(nb_points_by_chunk) is not int:
+        raise TypeError("TYPE ERROR: type of argument `nb_points_by_chunk` is {}, expected 'int'".format(nb_points_by_chunk))
+    elif not nb_points_by_chunk or nb_points_by_chunk < 0:
+        raise ValueError("VALUE ERROR: argument `nb_points_by_chunk` must be an integer greater than 0")
+    # Argument `spark`
+    if type(spark) is not bool and spark is not None:
+        raise TypeError("TYPE ERROR: type of argument `spark` is {}, expected `bool` or `NoneType`".format(type(spark)))
     # -----------------
     # 1 - Fit the model
     # -----------------
     # Arg `spark=True`: spark usage forced
     # Arg `spark=None`: Check using criteria (nb_points and number of ts)
-    if spark is True or (spark is None and SparkUtils.check_spark_usage(tsuid_list=tsuid_list,
-                                                                        nb_ts_criteria=100,
-                                                                        nb_points_by_chunk=nb_points_by_chunk)):
-        # kmeans_spark_internal(ts_list=tsuid_list, nb_clusters=nb_clusters, nb_points_by_chunk=nb_points_by_chunk)
-        model_spark = fit_kmeans_spark(data, n_cluster, random_state=None)
-        return model_spark
+    if spark or (spark is None and SparkUtils.check_spark_usage(tsuid_list=ts_list, nb_ts_criteria=100,
+                                                                nb_points_by_chunk=nb_points_by_chunk)):
+        res_kmeans = fit_kmeans_spark_internal(ts_list=ts_list, n_cluster=nb_clusters, random_state_kmeans=random_state)
     else:
-        model_sklearn = fit_kmeans_sklearn_internal(data, nb_clusters, random_state=None)
-        return model_sklearn
-
+        res_kmeans = fit_kmeans_sklearn_internal(ts_list=ts_list,
+                                                 n_cluster=nb_clusters,
+                                                 random_state_kmeans=random_state)
     # ------------------------------------
     # 2 - Compute the MDS (Multidimensional scaling) (purpose : 2 dimensional visualisation)
     # Note that the seed (random_state_mds) is the same
-    _, pos, centers_pos = mds_representation_kmeans(fit_model=model, data=paa,
-                                                    random_state_mds=random_state)
+    res_mds = mds_representation_kmeans(fitted_model=res_kmeans[0], data=res_kmeans[1], random_state_mds=random_state)
     # -----------------------
     # 3 - Prepare the outputs
     # -----------------------
-    k_means = format_kmeans(centers_pos=centers_pos, pos=pos, tsuid_list=list(paa.keys()), model=model)
-    return model, k_means
+    result = format_kmeans(result_mds=res_mds, ts_list=ts_list, result_kmeans=res_kmeans)
+    return res_kmeans[0], result
