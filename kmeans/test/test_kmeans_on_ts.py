@@ -19,17 +19,23 @@ import numpy as np
 import logging
 import time
 
+# Import sk Kmeans
+import sklearn.cluster
+# Import pyspark kmeans
+import pyspark.ml.clustering
+
 from ikats.core.resource.api import IkatsApi
-from ikats.core.library.exception import IkatsException, IkatsConflictError
+from ikats.core.library.exception import IkatsConflictError
 from ikats.algo.kmeans.kmeans_on_ts import fit_kmeans_on_ts
 
 LOGGER = logging.getLogger()
-# Log format
-LOGGER.setLevel(logging.WARNING)  #.DEBUG)
+# Log format. Used to be DEBUG
+LOGGER.setLevel(logging.WARNING)
 FORMATTER = logging.Formatter('%(asctime)s:%(levelname)s:%(funcName)s:%(message)s')
 # Create another handler that will redirect log entries to STDOUT
 STREAM_HANDLER = logging.StreamHandler()
-STREAM_HANDLER.setLevel(logging.WARNING) # .DEBUG
+# Used to be DEBUG
+STREAM_HANDLER.setLevel(logging.WARNING)
 STREAM_HANDLER.setFormatter(FORMATTER)
 LOGGER.addHandler(STREAM_HANDLER)
 
@@ -51,78 +57,78 @@ def gen_ts(ts_id):
     # -----------------------------------------------------------------------------
     if ts_id == 1:
         time1 = list(range(1, 3))
-        ts_A1 = [7, 3]
-        ts_A2 = list(ts_A1 + np.random.normal(0, 1, size=len(ts_A1)))
-        ts_B1 = [14, 13]
-        ts_B2 = list(ts_B1 + np.random.normal(0, 1, size=len(ts_B1)))
-        ts_content = np.array([np.array([time1, ts_A1]).T,
-                               np.array([time1, ts_A2]).T,
-                               np.array([time1, ts_B1]).T,
-                               np.array([time1, ts_B2]).T], np.float64)
+        ts_a1 = [7, 3]
+        ts_a2 = list(ts_a1 + np.random.normal(0, 1, size=len(ts_a1)))
+        ts_b1 = [14, 13]
+        ts_b2 = list(ts_b1 + np.random.normal(0, 1, size=len(ts_b1)))
+        ts_content = np.array([np.array([time1, ts_a1]).T,
+                               np.array([time1, ts_a2]).T,
+                               np.array([time1, ts_b1]).T,
+                               np.array([time1, ts_b2]).T], np.float64)
     # -------------------------------------------------------------------------------
     # CASE 2: 4 TS divided in 2 groups of 2 with 10 points per TS. shape = (4, 10, 2)
     # -------------------------------------------------------------------------------
     elif ts_id == 2:
         time1 = list(range(1, 11))
-        ts_A1 = [7, 3, 4, 9, 5, 6, 1, 0, 1, 2]
-        ts_A2 = ts_A1 + np.random.normal(0, 1, size=len(ts_A1))
-        ts_B1 = [14, 13, 15, 15, 20, 30, 42, 43, 47, 50]
-        ts_B2 = ts_B1 + np.random.normal(0, 1, size=len(ts_A1))
-        ts_content = np.array([np.array([time1, ts_A1]).T,
-                               np.array([time1, ts_A2]).T,
-                               np.array([time1, ts_B1]).T,
-                               np.array([time1, ts_B2]).T], np.float64)
+        ts_a1 = [7, 3, 4, 9, 5, 6, 1, 0, 1, 2]
+        ts_a2 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
+        ts_b1 = [14, 13, 15, 15, 20, 30, 42, 43, 47, 50]
+        ts_b2 = ts_b1 + np.random.normal(0, 1, size=len(ts_a1))
+        ts_content = np.array([np.array([time1, ts_a1]).T,
+                               np.array([time1, ts_a2]).T,
+                               np.array([time1, ts_b1]).T,
+                               np.array([time1, ts_b2]).T], np.float64)
     # -------------------------------------------------------------------------------
     # CASE 3: 15 TS divided in 3 groups of 5 with 2 points per TS. shape = (15, 2, 2)
     # -------------------------------------------------------------------------------
     elif ts_id == 3:
         time1 = list(range(1, 3))
-        ts_A1 = [7, 3]
-        ts_A2 = ts_A1 + np.random.normal(0, 1, size=len(ts_A1))
-        ts_A3 = ts_A1 + np.random.normal(0, 1, size=len(ts_A1))
-        ts_A4 = ts_A1 + np.random.normal(0, 1, size=len(ts_A1))
-        ts_A5 = ts_A1 + np.random.normal(0, 1, size=len(ts_A1))
-        ts_B1 = [14, 13]
-        ts_B2 = ts_B1 + np.random.normal(0, 1, size=len(ts_B1))
-        ts_B3 = ts_B1 + np.random.normal(0, 1, size=len(ts_B1))
-        ts_B4 = ts_B1 + np.random.normal(0, 1, size=len(ts_B1))
-        ts_B5 = ts_B1 + np.random.normal(0, 1, size=len(ts_B1))
-        ts_C1 = [50, 55]
-        ts_C2 = ts_C1 + np.random.normal(0, 1, size=len(ts_C1))
-        ts_C3 = ts_C1 + np.random.normal(0, 1, size=len(ts_C1))
-        ts_C4 = ts_C1 + np.random.normal(0, 1, size=len(ts_C1))
-        ts_C5 = ts_C1 + np.random.normal(0, 1, size=len(ts_C1))
-        ts_content = np.array([np.array([time1, ts_A1]).T, np.array([time1, ts_A2]).T, np.array([time1, ts_A3]).T,
-                               np.array([time1, ts_A4]).T, np.array([time1, ts_A5]).T, np.array([time1, ts_B1]).T,
-                               np.array([time1, ts_B2]).T, np.array([time1, ts_B3]).T, np.array([time1, ts_B4]).T,
-                               np.array([time1, ts_B5]).T, np.array([time1, ts_C1]).T, np.array([time1, ts_C2]).T,
-                               np.array([time1, ts_C3]).T, np.array([time1, ts_C4]).T, np.array([time1, ts_C5]).T],
+        ts_a1 = [7, 3]
+        ts_a2 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
+        ts_a3 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
+        ts_a4 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
+        ts_a5 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
+        ts_b1 = [14, 13]
+        ts_b2 = ts_b1 + np.random.normal(0, 1, size=len(ts_b1))
+        ts_b3 = ts_b1 + np.random.normal(0, 1, size=len(ts_b1))
+        ts_b4 = ts_b1 + np.random.normal(0, 1, size=len(ts_b1))
+        ts_b5 = ts_b1 + np.random.normal(0, 1, size=len(ts_b1))
+        ts_c1 = [50, 55]
+        ts_c2 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
+        ts_c3 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
+        ts_c4 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
+        ts_c5 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
+        ts_content = np.array([np.array([time1, ts_a1]).T, np.array([time1, ts_a2]).T, np.array([time1, ts_a3]).T,
+                               np.array([time1, ts_a4]).T, np.array([time1, ts_a5]).T, np.array([time1, ts_b1]).T,
+                               np.array([time1, ts_b2]).T, np.array([time1, ts_b3]).T, np.array([time1, ts_b4]).T,
+                               np.array([time1, ts_b5]).T, np.array([time1, ts_c1]).T, np.array([time1, ts_c2]).T,
+                               np.array([time1, ts_c3]).T, np.array([time1, ts_c4]).T, np.array([time1, ts_c5]).T],
                               np.float64)
     # ---------------------------------------------------------------------------------
     # CASE 4: 15 TS divided in 3 groups of 5 with 10 points per TS. shape = (15, 10, 2)
     # ---------------------------------------------------------------------------------
     elif ts_id == 4:
         time1 = list(range(1, 11))
-        ts_A1 = [7, 3, 4, 9, 5, 6, 1, 0, 1, 2]
-        ts_A2 = ts_A1 + np.random.normal(0, 1, size=len(ts_A1))
-        ts_A3 = ts_A1 + np.random.normal(0, 1, size=len(ts_A1))
-        ts_A4 = ts_A1 + np.random.normal(0, 1, size=len(ts_A1))
-        ts_A5 = ts_A1 + np.random.normal(0, 1, size=len(ts_A1))
-        ts_B1 = [14, 13, 15, 15, 20, 30, 42, 43, 47, 50]
-        ts_B2 = ts_B1 + np.random.normal(0, 1, size=len(ts_B1))
-        ts_B3 = ts_B1 + np.random.normal(0, 1, size=len(ts_B1))
-        ts_B4 = ts_B1 + np.random.normal(0, 1, size=len(ts_B1))
-        ts_B5 = ts_B1 + np.random.normal(0, 1, size=len(ts_B1))
-        ts_C1 = [50, 55, 54, 52, 59, 57, 51, 55, 52, 58]
-        ts_C2 = ts_C1 + np.random.normal(0, 1, size=len(ts_C1))
-        ts_C3 = ts_C1 + np.random.normal(0, 1, size=len(ts_C1))
-        ts_C4 = ts_C1 + np.random.normal(0, 1, size=len(ts_C1))
-        ts_C5 = ts_C1 + np.random.normal(0, 1, size=len(ts_C1))
-        ts_content = np.array([np.array([time1, ts_A1]).T, np.array([time1, ts_A2]).T, np.array([time1, ts_A3]).T,
-                               np.array([time1, ts_A4]).T, np.array([time1, ts_A5]).T, np.array([time1, ts_B1]).T,
-                               np.array([time1, ts_B2]).T, np.array([time1, ts_B3]).T, np.array([time1, ts_B4]).T,
-                               np.array([time1, ts_B5]).T, np.array([time1, ts_C1]).T, np.array([time1, ts_C2]).T,
-                               np.array([time1, ts_C3]).T, np.array([time1, ts_C4]).T, np.array([time1, ts_C5]).T],
+        ts_a1 = [7, 3, 4, 9, 5, 6, 1, 0, 1, 2]
+        ts_a2 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
+        ts_a3 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
+        ts_a4 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
+        ts_a5 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
+        ts_b1 = [14, 13, 15, 15, 20, 30, 42, 43, 47, 50]
+        ts_b2 = ts_b1 + np.random.normal(0, 1, size=len(ts_b1))
+        ts_b3 = ts_b1 + np.random.normal(0, 1, size=len(ts_b1))
+        ts_b4 = ts_b1 + np.random.normal(0, 1, size=len(ts_b1))
+        ts_b5 = ts_b1 + np.random.normal(0, 1, size=len(ts_b1))
+        ts_c1 = [50, 55, 54, 52, 59, 57, 51, 55, 52, 58]
+        ts_c2 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
+        ts_c3 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
+        ts_c4 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
+        ts_c5 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
+        ts_content = np.array([np.array([time1, ts_a1]).T, np.array([time1, ts_a2]).T, np.array([time1, ts_a3]).T,
+                               np.array([time1, ts_a4]).T, np.array([time1, ts_a5]).T, np.array([time1, ts_b1]).T,
+                               np.array([time1, ts_b2]).T, np.array([time1, ts_b3]).T, np.array([time1, ts_b4]).T,
+                               np.array([time1, ts_b5]).T, np.array([time1, ts_c1]).T, np.array([time1, ts_c2]).T,
+                               np.array([time1, ts_c3]).T, np.array([time1, ts_c4]).T, np.array([time1, ts_c5]).T],
                               np.float64)
     else:
         raise NotImplementedError
@@ -136,22 +142,23 @@ def gen_ts(ts_id):
         current_fid = fid + '_TS_' + str(i + 1)
 
         try:
-            # Create a TS, dict with keys: 'tsuid', 'funcId', 'status', 'reponseStatus', 'summary', 'errors' and 'numberOfSuccess'
+            # Create a TS, dict with keys: 'tsuid', 'funcId', 'status', 'reponseStatus', 'summary', 'errors',
+            # 'numberOfSuccess'
             IkatsApi.ts.create_ref(current_fid)
         except IkatsConflictError:
             # If the TS already exists, we add timestamp to have an unique FID
             current_fid = '%s_%s_' % (current_fid, int(time.time() * 1000))
             IkatsApi.ts.create_ref(current_fid)
 
-        myTS = IkatsApi.ts.create(fid=current_fid, data=np.array(ts_content)[i, :, :])
+        my_ts = IkatsApi.ts.create(fid=current_fid, data=np.array(ts_content)[i, :, :])
         # Create metadatas 'qual_nb_points', 'name' and 'funcId'
-        IkatsApi.md.create(tsuid=myTS['tsuid'], name='qual_nb_points', value=len(ts_content), force_update=True)
-        IkatsApi.md.create(tsuid=myTS['tsuid'], name='metric', value='metric_%s' % ts_id, force_update=True)
-        IkatsApi.md.create(tsuid=myTS['tsuid'], name='funcId', value=current_fid, force_update=True)
-        if not myTS['status']:
+        IkatsApi.md.create(tsuid=my_ts['tsuid'], name='qual_nb_points', value=len(ts_content), force_update=True)
+        IkatsApi.md.create(tsuid=my_ts['tsuid'], name='metric', value='metric_%s' % ts_id, force_update=True)
+        IkatsApi.md.create(tsuid=my_ts['tsuid'], name='funcId', value=current_fid, force_update=True)
+        if not my_ts['status']:
             raise SystemError("Error while creating TS %s" % ts_id)
         # Create a list of lists of TS (dicts)
-        result.append({'tsuid': myTS['tsuid'], 'funcId': myTS['funcId'], 'ts_content': ts_content[i]})
+        result.append({'tsuid': my_ts['tsuid'], 'funcId': my_ts['funcId'], 'ts_content': ts_content[i]})
     return result
 
 
@@ -235,7 +242,6 @@ class TestKmeansOnTS(unittest.TestCase):
             with self.assertRaises(TypeError, msg=msg):
                 # noinspection PyTypeChecker
                 fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark='42')
-
         finally:
             # Clean up database
             self.clean_up_db(my_ts)
@@ -252,17 +258,14 @@ class TestKmeansOnTS(unittest.TestCase):
             # TS creation
             my_ts = gen_ts(1)
             # Fit the model
+            # noinspection PyTypeChecker
             result_kmeans = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=False, random_state=rand_state)
             # Checks of outputs' type
             self.assertEqual(type(result_kmeans[1]), dict, msg="ERROR: This output's type is not 'dict'")
-            self.assertEqual(type(result_kmeans[0]), 'sklearn.cluster.k_means_.KMeans',
-                             msg="ERROR: This output's type is not 'sklearn.cluster.k_means_'")
-        except Exception:
-            msg = "Unexpected error in test_kmeans_sklearn_output_type()"
-            raise IkatsException(msg)
+            self.assertTrue(type(result_kmeans[0]) is sklearn.cluster.k_means_.KMeans,
+                            msg="ERROR: This output's type is not 'sklearn.cluster.k_means_'")
         finally:
             self.clean_up_db(my_ts)
-
 
     def test_kmeans_spark_output_type(self):
         """
@@ -273,14 +276,12 @@ class TestKmeansOnTS(unittest.TestCase):
             # TS creation
             my_ts = gen_ts(1)
             # Fit the model
+            # noinspection PyTypeChecker
             result_kmeans = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=True, random_state=rand_state)
             # Checks of outputs' type
             self.assertEqual(type(result_kmeans[1]), dict, msg="ERROR: This output's type is not 'dict'")
-            self.assertEqual(type(result_kmeans[0]), 'pyspark.ml.clustering.KMeansModel',
-                             msg="ERROR: This output's type is not 'pyspark.ml.clustering.KMeansModel'")
-        except Exception:
-            msg = "Unexpected error in test_kmeans_spark_output_type()"
-            raise IkatsException(msg)
+            self.assertTrue(type(result_kmeans[0]) is pyspark.ml.clustering.KMeansModel,
+                            msg="ERROR: This output's type is not 'pyspark.ml.clustering.KMeansModel'")
         finally:
             self.clean_up_db(my_ts)
 
@@ -297,117 +298,51 @@ class TestKmeansOnTS(unittest.TestCase):
             # TS creation
             my_ts = gen_ts(1)
             # Fit the model
-            fit_kmeans_on_ts()
-            result_kmeans = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=False, random_state=rand_state)
-            condition = result_kmeans[0].labels_ == np.array([0, 0, 1, 1], dtype=np.int32)
+            model, result_kmeans = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=False, random_state=rand_state)
+
+            # TODO: tester le fait que 2 TSUID doivent être ds le même dict
+            condition = (result_kmeans == np.array([0, 0, 1, 1], dtype=np.int32))
             self.assertEqual(np.all(condition), True, msg="ERROR: The obtained clustering is not the one expected")
-        except Exception:
-            msg = "Unexpected error in test_kmeans_sklearn_result()"
-            raise IkatsException(msg)
         finally:
             self.clean_up_db(my_ts)
-
 
     def test_kmeans_spark_result(self):
         """
         Test the result obtained for the sklearn version of the K-means algorithm on time series
         """
-        # TODO : Problème avec ce que me retourne ma fonction Spark. Les prédictions ne sont accessibles que dans Row
-        # TODO et pas dans le modèle lui-même. Code à réaménager en conséquence.
-        # # Used for reproducible results
-        # rand_state = 1
-        # try:
-        #     # TS creation
-        #     my_ts = gen_ts(1)
-        #     # Fit the model
-        #     fit_kmeans_on_ts()
-        #     result_kmeans = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=True, random_state=rand_state)
-        #     # Extract the predictions
-        #     pred_list = []
-        #     for i in result_kmeans[2]:
-        #         pred_list.append(i['prediction'])
-        #         predictions = np.array(pred_list, dtype=np.int32)
-        #
-        #     # LABORATOIRE MOUHOUHAHA
-        #     pred_list = []
-        #     for i in my_ts:
-        #         tsuid = i['tsuid']
-        #         for j in result_kmeans[1]:
-        #             if j[tsuid]:
-        #                 pred_list.append(j[1])
-        #
-        #
-        #     condition = predictions == np.array([0, 0, 1, 1], dtype=np.int32)
-        #
-        #     self.assertEqual(np.all(condition), True, msg="ERROR: The obtained clustering is not the one expected")
-        # except Exception:
-        #     msg = "Unexpected error in test_kmeans_spark_result()"
-        #     raise IkatsException(msg)
-        # finally:
-        #     self.clean_up_db(my_ts)
-
+        # Used for reproducible results
+        rand_state = 1
+        try:
+            # TS creation
+            my_ts = gen_ts(1)
+            # Fit the model
+            # noinspection PyTypeChecker
+            # TODO: cf fonction précédente
+            model, result_kmeans = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=True, random_state=rand_state)
+            condition = (result_kmeans == np.array([0, 0, 1, 1], dtype=np.int32))
+            self.assertEqual(np.all(condition), True, msg="ERROR: The obtained clustering is not the one expected")
+        finally:
+            self.clean_up_db(my_ts)
 
     def test_diff_sklearn_spark(self):
         """
         Test the difference of result between the functions kmeans_spark() and kmeans_sklearn() on time series.
         The same result should be obtained with both ways.
         """
-        # except Exception:
-        #     msg = "Unexpected error in test_diff_sklearn_spark()"
-        #     raise IkatsException(msg)
-        # finally:
-        #     self.clean_up_db(my_ts)
-        pass
-
-
-    # ---------------- #
-    # ROBUSTNESS TESTS #
-    # ---------------- #
-    def test_kmeans_sklearn_robustness(self):
-        """
-        Test the robustness of the function kmeans_sklearn() on time series
-        """
-        # except Exception:
-        #     msg = "Unexpected error in test_kmeans_sklearn_robustness()"
-        #     raise IkatsException(msg)
-        # finally:
-        #     self.clean_up_db(my_ts)
-        pass
-
-
-    def test_kmeans_spark_robustness(self):
-        """
-        Test the robustness of the function kmeans_spark() on time series
-        """
-        # The same *random_state* is used for reproducible results
-        # random_state = 1
-        # sax = gen_sax(1)
-        #
-        # # invalid sax type
-        # with self.assertRaises(IkatsInputTypeError, msg="Error, invalid sax type."):
-        #     fit_kmeans(sax=[1, 2], n_cluster=2, random_state=random_state)
-        #     fit_kmeans(sax={"a": [1, 2], "b": [1, 2]}, n_cluster=2, random_state=random_state)
-        #     fit_kmeans(sax={"a": {"paa": [1, 2]}, "b": [2, 3]}, n_cluster=2, random_state=random_state)
-        #     fit_kmeans(sax={"a": {"paa": [1, 2]}, "b": {"paa": [2, 3, 3]}}, n_cluster=2, random_state=random_state)
-        #     fit_kmeans(sax="paa", n_cluster=2, random_state=random_state)
-        #
-        # # invalid n_cluster type
-        # with self.assertRaises(IkatsInputTypeError, msg="Error, invalid n_cluster type."):
-        #     fit_kmeans(sax=sax, n_cluster="2", random_state=random_state)
-        #     fit_kmeans(sax=sax, n_cluster=[2, 3, 4], random_state=random_state)
-        #
-        # # invalid n_cluster value
-        # with self.assertRaises(IkatsInputTypeError, msg="Error, invalid n_cluster value."):
-        #     fit_kmeans(sax=sax, n_cluster=-2, random_state=random_state)
-        #     # (referenced in the code as a TypeError)
-        #
-        # # invalid random_state type
-        # with self.assertRaises(IkatsInputTypeError, msg="Error, invalid random_state type"):
-        #     fit_kmeans(sax=sax, n_cluster=2, random_state="random_state")
-        #     fit_kmeans(sax=sax, n_cluster=2, random_state=[1, 3])
-        # except Exception:
-        #     msg = "Unexpected error in test_kmeans_spark_robustness()"
-        #     raise IkatsException(msg)
-        # finally:
-        #     self.clean_up_db(my_ts)
-        pass
+        # Used for reproducible results
+        rand_state = 1
+        try:
+            # TS creation
+            my_ts = gen_ts(1)
+            # Fit the model
+            _, result_sklearn = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=False, random_state=rand_state)
+            _, result_spark = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=True, random_state=rand_state)
+            # TODO: Problème éventuel de label switching. Le lancer plusieurs fois !
+            condition = (result_sklearn == result_spark)
+            # TODO: vérifier que MDS est bien reproductible avec la même seed
+            msg = "ERROR: The obtained clustering is not the one expected.\n" \
+                  "Result sklearn = {} \n" \
+                  "Result Spark ={}".format(result_sklearn, result_spark)
+            self.assertEqual(np.all(condition), True, msg=msg)
+        finally:
+            self.clean_up_db(my_ts)
