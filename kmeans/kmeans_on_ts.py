@@ -101,8 +101,9 @@ def fit_kmeans_sklearn_internal(tsuid_list, n_cluster, random_state_kmeans=None)
 
         # CENTROIDS
         centroids_df = pd.DataFrame(centroids_sklearn, columns=["t_" + str(i) for i in range(n_times)])
-        # Step where we add the columns TSUID and CLUSTER before concatenation with centroids_df
-        temp = pd.DataFrame({'TSUID': ['C' + str(i) for i in range(n_cluster)], 'CLUSTER_ID': range(n_cluster)})
+        # Add the columns TSUID and CLUSTER before concatenation with centroids_df
+        temp = pd.DataFrame({'TSUID': ['C' + str(i) for i in range(1, n_cluster + 1)], 'CLUSTER_ID': range(n_cluster)})
+        # Column "TSUID" contains "C1", ..., "C{n_cluster}"
 
         centroids_df = pd.concat([temp, centroids_df], axis=1)
         # Example:
@@ -215,7 +216,7 @@ def fit_kmeans_spark_internal(tsuid_list, n_cluster, random_state_kmeans=None):
         SSessionManager.stop()
 
 
-def mds_representation_kmeans(data, nb_clusters, random_state_mds=None):
+def mds_representation_kmeans(data, random_state_mds=None):
     """
     Compute the MultiDimensional Scaling (MDS) transformation to the K-Means results.
     Purpose: a two dimensional representation of the clustering.
@@ -223,9 +224,6 @@ def mds_representation_kmeans(data, nb_clusters, random_state_mds=None):
     :param data:  Result of Kmeans fitting. Data frame with indexes, and columns CLUSTER_ID, TSUID, t_0, ..., t_n
     for the values of time
     :type data: pandas.DataFrame
-
-    :param nb_clusters: The number of clusters of the K-means model
-    :type nb_clusters: int
 
     :param random_state_mds: the seed used by the random number generator (if int) to make the results reproducible
     If None, the random number generator is the RandomState instance used by np.random
@@ -353,8 +351,8 @@ def format_kmeans(all_positions, n_cluster):
         # 4           0    C1  5.432918 -4.133372
 
         # Retrieve the position [x, y] of the current centroid
-        result[c]['centroid'] = current_centroid[['COMP_1', 'COMP_2']].values
-        # Example: array([[ 5.43291802, -4.13337188]])
+        result[c]['centroid'] = current_centroid[['COMP_1', 'COMP_2']].values[0]
+        # Example: array([ 5.43291802, -4.13337188])
 
         # Retrieve current CLUSTER ID
         current_cluster_id = current_centroid['CLUSTER_ID'].values[0]
@@ -470,11 +468,11 @@ def fit_kmeans_on_ts(ts_list, nb_clusters, random_state=None, nb_points_by_chunk
     # 2 - Compute the MDS (Multidimensional scaling) (purpose : 2 dimensional visualisation)
     # ------------------------------------
     # Note that the seed (random_state_mds) is the same
-    all_positions = mds_representation_kmeans(data=result_df,
-                                              nb_clusters=nb_clusters,
-                                              random_state_mds=random_state)
+    all_positions = mds_representation_kmeans(data=result_df, random_state_mds=random_state)
     # -----------------------
     # 3 - Prepare the outputs
     # -----------------------
     result = format_kmeans(all_positions=all_positions, n_cluster=nb_clusters)
-    return model, result
+
+    # For now, model is not outputed
+    return result  #, model

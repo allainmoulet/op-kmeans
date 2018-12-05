@@ -48,41 +48,56 @@ def gen_ts(ts_id):
     :type ts_id: int
 
     :return: the TSUID, funcId and all expected result (one per scaling)
-    :rtype: dict
+    :rtype: list of dict
     """
     # Build TS identifier
     fid = 'UNIT_TEST_K-MEANS_%s' % ts_id
     # -----------------------------------------------------------------------------
+    # CASE 0: 4 TS divided in 2 groups of 2 with 2 points per TS without randomness. Used for test_diff_sklearn_spark().
+    # shape = (4, 2, 2)
+    # -----------------------------------------------------------------------------
+    if ts_id == 0:
+        temps = list(range(1, 3))
+        ts_a1 = [7, 3]
+        ts_a2 = [9, 4]
+        ts_b1 = [14, 15]
+        ts_b2 = [12, 17]
+        ts_content = np.array([np.array([temps, ts_a1]).T,
+                               np.array([temps, ts_a2]).T,
+                               np.array([temps, ts_b1]).T,
+                               np.array([temps, ts_b2]).T], np.float64)
+
+    # -----------------------------------------------------------------------------
     # CASE 1: 4 TS divided in 2 groups of 2 with 2 points per TS. shape = (4, 2, 2)
     # -----------------------------------------------------------------------------
-    if ts_id == 1:
-        time1 = list(range(1, 3))
+    elif ts_id == 1:
+        temps = list(range(1, 3))
         ts_a1 = [7, 3]
         ts_a2 = list(ts_a1 + np.random.normal(0, 1, size=len(ts_a1)))
         ts_b1 = [14, 13]
         ts_b2 = list(ts_b1 + np.random.normal(0, 1, size=len(ts_b1)))
-        ts_content = np.array([np.array([time1, ts_a1]).T,
-                               np.array([time1, ts_a2]).T,
-                               np.array([time1, ts_b1]).T,
-                               np.array([time1, ts_b2]).T], np.float64)
+        ts_content = np.array([np.array([temps, ts_a1]).T,
+                               np.array([temps, ts_a2]).T,
+                               np.array([temps, ts_b1]).T,
+                               np.array([temps, ts_b2]).T], np.float64)
     # -------------------------------------------------------------------------------
     # CASE 2: 4 TS divided in 2 groups of 2 with 10 points per TS. shape = (4, 10, 2)
     # -------------------------------------------------------------------------------
     elif ts_id == 2:
-        time1 = list(range(1, 11))
+        temps = list(range(1, 11))
         ts_a1 = [7, 3, 4, 9, 5, 6, 1, 0, 1, 2]
         ts_a2 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
         ts_b1 = [14, 13, 15, 15, 20, 30, 42, 43, 47, 50]
         ts_b2 = ts_b1 + np.random.normal(0, 1, size=len(ts_a1))
-        ts_content = np.array([np.array([time1, ts_a1]).T,
-                               np.array([time1, ts_a2]).T,
-                               np.array([time1, ts_b1]).T,
-                               np.array([time1, ts_b2]).T], np.float64)
+        ts_content = np.array([np.array([temps, ts_a1]).T,
+                               np.array([temps, ts_a2]).T,
+                               np.array([temps, ts_b1]).T,
+                               np.array([temps, ts_b2]).T], np.float64)
     # -------------------------------------------------------------------------------
     # CASE 3: 15 TS divided in 3 groups of 5 with 2 points per TS. shape = (15, 2, 2)
     # -------------------------------------------------------------------------------
     elif ts_id == 3:
-        time1 = list(range(1, 3))
+        temps = list(range(1, 3))
         ts_a1 = [7, 3]
         ts_a2 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
         ts_a3 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
@@ -98,17 +113,17 @@ def gen_ts(ts_id):
         ts_c3 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
         ts_c4 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
         ts_c5 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
-        ts_content = np.array([np.array([time1, ts_a1]).T, np.array([time1, ts_a2]).T, np.array([time1, ts_a3]).T,
-                               np.array([time1, ts_a4]).T, np.array([time1, ts_a5]).T, np.array([time1, ts_b1]).T,
-                               np.array([time1, ts_b2]).T, np.array([time1, ts_b3]).T, np.array([time1, ts_b4]).T,
-                               np.array([time1, ts_b5]).T, np.array([time1, ts_c1]).T, np.array([time1, ts_c2]).T,
-                               np.array([time1, ts_c3]).T, np.array([time1, ts_c4]).T, np.array([time1, ts_c5]).T],
+        ts_content = np.array([np.array([temps, ts_a1]).T, np.array([temps, ts_a2]).T, np.array([temps, ts_a3]).T,
+                               np.array([temps, ts_a4]).T, np.array([temps, ts_a5]).T, np.array([temps, ts_b1]).T,
+                               np.array([temps, ts_b2]).T, np.array([temps, ts_b3]).T, np.array([temps, ts_b4]).T,
+                               np.array([temps, ts_b5]).T, np.array([temps, ts_c1]).T, np.array([temps, ts_c2]).T,
+                               np.array([temps, ts_c3]).T, np.array([temps, ts_c4]).T, np.array([temps, ts_c5]).T],
                               np.float64)
     # ---------------------------------------------------------------------------------
     # CASE 4: 15 TS divided in 3 groups of 5 with 10 points per TS. shape = (15, 10, 2)
     # ---------------------------------------------------------------------------------
     elif ts_id == 4:
-        time1 = list(range(1, 11))
+        temps = list(range(1, 11))
         ts_a1 = [7, 3, 4, 9, 5, 6, 1, 0, 1, 2]
         ts_a2 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
         ts_a3 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
@@ -124,11 +139,11 @@ def gen_ts(ts_id):
         ts_c3 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
         ts_c4 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
         ts_c5 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
-        ts_content = np.array([np.array([time1, ts_a1]).T, np.array([time1, ts_a2]).T, np.array([time1, ts_a3]).T,
-                               np.array([time1, ts_a4]).T, np.array([time1, ts_a5]).T, np.array([time1, ts_b1]).T,
-                               np.array([time1, ts_b2]).T, np.array([time1, ts_b3]).T, np.array([time1, ts_b4]).T,
-                               np.array([time1, ts_b5]).T, np.array([time1, ts_c1]).T, np.array([time1, ts_c2]).T,
-                               np.array([time1, ts_c3]).T, np.array([time1, ts_c4]).T, np.array([time1, ts_c5]).T],
+        ts_content = np.array([np.array([temps, ts_a1]).T, np.array([temps, ts_a2]).T, np.array([temps, ts_a3]).T,
+                               np.array([temps, ts_a4]).T, np.array([temps, ts_a5]).T, np.array([temps, ts_b1]).T,
+                               np.array([temps, ts_b2]).T, np.array([temps, ts_b3]).T, np.array([temps, ts_b4]).T,
+                               np.array([temps, ts_b5]).T, np.array([temps, ts_c1]).T, np.array([temps, ts_c2]).T,
+                               np.array([temps, ts_c3]).T, np.array([temps, ts_c4]).T, np.array([temps, ts_c5]).T],
                               np.float64)
     else:
         raise NotImplementedError
@@ -141,15 +156,7 @@ def gen_ts(ts_id):
         # `fid` must be unique for each TS
         current_fid = fid + '_TS_' + str(i + 1)
 
-        try:
-            # Create a TS, dict with keys: 'tsuid', 'funcId', 'status', 'reponseStatus', 'summary', 'errors',
-            # 'numberOfSuccess'
-            IkatsApi.ts.create_ref(current_fid)
-        except IkatsConflictError:
-            # If the TS already exists, we add timestamp to have an unique FID
-            current_fid = '%s_%s_' % (current_fid, int(time.time() * 1000))
-            IkatsApi.ts.create_ref(current_fid)
-
+        # Create TS
         my_ts = IkatsApi.ts.create(fid=current_fid, data=np.array(ts_content)[i, :, :])
         # Create metadatas 'qual_nb_points', 'name' and 'funcId'
         IkatsApi.md.create(tsuid=my_ts['tsuid'], name='qual_nb_points', value=len(ts_content), force_update=True)
@@ -253,35 +260,33 @@ class TestKmeansOnTS(unittest.TestCase):
         """
         Test the 'type' of the results for the sklearn version of the K-means algorithm on time series
         """
+        rand_state = 1
+        # TS creation
+        my_ts = gen_ts(1)
+
         try:
-            rand_state = 1
-            # TS creation
-            my_ts = gen_ts(1)
             # Fit the model
-            # noinspection PyTypeChecker
             result_kmeans = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=False, random_state=rand_state)
-            # Checks of outputs' type
-            self.assertEqual(type(result_kmeans[1]), dict, msg="ERROR: This output's type is not 'dict'")
-            self.assertTrue(type(result_kmeans[0]) is sklearn.cluster.k_means_.KMeans,
-                            msg="ERROR: This output's type is not 'sklearn.cluster.k_means_'")
+
+            # Checks of output's type (dict)
+            self.assertEqual(type(result_kmeans), dict, msg="ERROR: This output's type is not 'dict'")
         finally:
             self.clean_up_db(my_ts)
 
+    @unittest.skip
     def test_kmeans_spark_output_type(self):
         """
         Test the 'type' of the results for the Spark version of the K-means algorithm on time series
         """
+        rand_state = 1
+        # TS creation
+        my_ts = gen_ts(1)
+
         try:
-            rand_state = 1
-            # TS creation
-            my_ts = gen_ts(1)
             # Fit the model
-            # noinspection PyTypeChecker
             result_kmeans = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=True, random_state=rand_state)
-            # Checks of outputs' type
-            self.assertEqual(type(result_kmeans[1]), dict, msg="ERROR: This output's type is not 'dict'")
-            self.assertTrue(type(result_kmeans[0]) is pyspark.ml.clustering.KMeansModel,
-                            msg="ERROR: This output's type is not 'pyspark.ml.clustering.KMeansModel'")
+            # Checks of outputs' type (dict)
+            self.assertEqual(type(result_kmeans), dict, msg="ERROR: This output's type is not 'dict'")
         finally:
             self.clean_up_db(my_ts)
 
@@ -294,36 +299,66 @@ class TestKmeansOnTS(unittest.TestCase):
         """
         # Used for reproducible results
         rand_state = 1
-        try:
-            # TS creation
-            my_ts = gen_ts(1)
-            # Fit the model
-            model, result_kmeans = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=False, random_state=rand_state)
+        # TS creation
+        my_ts = gen_ts(1)
 
-            # TODO: tester le fait que 2 TSUID doivent être ds le même dict
-            condition = (result_kmeans == np.array([0, 0, 1, 1], dtype=np.int32))
-            self.assertEqual(np.all(condition), True, msg="ERROR: The obtained clustering is not the one expected")
+        # Get the tsuid list
+        tsuid_list = [x['tsuid'] for x in my_ts]
+
+        try:
+            # Fit the model
+            result_kmeans = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=False, random_state=rand_state)
+
+            # TSUID associated to the first centroid
+            tsuid_group = list(result_kmeans.get("C1").keys())
+            # Example: ['centroid', '14ED6B00000100076C0000020006E0000003000772', '2630EF00000100076C0000020006E0000003000771']
+
+            # Check what TS are contained in the 1st cluster
+            condition = all(x in tsuid_group for x in tsuid_list[0:2]) or \
+                        all(x in tsuid_group for x in tsuid_list[2:4])
+            self.assertTrue(condition, msg="ERROR: The obtained clustering is not the one expected")
+
+            # Check if each cluster contains 2 time series
+            condition = len(result_kmeans['C1']) == len(result_kmeans['C2'])
+            self.assertTrue(condition, msg="ERROR: The obtained clustering is un-balanced")
+
         finally:
             self.clean_up_db(my_ts)
 
+    @unittest.skip
     def test_kmeans_spark_result(self):
         """
         Test the result obtained for the sklearn version of the K-means algorithm on time series
         """
         # Used for reproducible results
+        # Used for reproducible results
         rand_state = 1
+        # TS creation
+        my_ts = gen_ts(1)
+
+        # Get the tsuid list
+        tsuid_list = [x['tsuid'] for x in my_ts]
+
         try:
-            # TS creation
-            my_ts = gen_ts(1)
             # Fit the model
-            # noinspection PyTypeChecker
-            # TODO: cf fonction précédente
-            model, result_kmeans = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=True, random_state=rand_state)
-            condition = (result_kmeans == np.array([0, 0, 1, 1], dtype=np.int32))
-            self.assertEqual(np.all(condition), True, msg="ERROR: The obtained clustering is not the one expected")
+            result_kmeans = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=True, random_state=rand_state)
+
+            # TSUID associated to the first centroid
+            tsuid_group = list(result_kmeans.get("C1").keys())
+
+            # Check what TS are contained in the 1st cluster
+            condition = all(x in tsuid_group for x in tsuid_list[0:2]) or \
+                        all(x in tsuid_group for x in tsuid_list[2:4])
+            self.assertTrue(condition, msg="ERROR: The obtained clustering is not the one expected")
+
+            # Check if each cluster contains 2 time series
+            condition = len(result_kmeans['C1']) == len(result_kmeans['C2'])
+            self.assertTrue(condition, msg="ERROR: The obtained clustering is un-balanced")
+
         finally:
             self.clean_up_db(my_ts)
 
+    @unittest.skip
     def test_diff_sklearn_spark(self):
         """
         Test the difference of result between the functions kmeans_spark() and kmeans_sklearn() on time series.
@@ -331,16 +366,26 @@ class TestKmeansOnTS(unittest.TestCase):
         """
         # Used for reproducible results
         rand_state = 1
+        # TS creation
+        my_ts = gen_ts(0)
+
         try:
-            # TS creation
-            my_ts = gen_ts(1)
             # Fit the model
-            _, result_sklearn = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=False, random_state=rand_state)
-            _, result_spark = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=True, random_state=rand_state)
-            # TODO: Problème éventuel de label switching. Le lancer plusieurs fois !
-            condition = (result_sklearn == result_spark)
-            # TODO: vérifier que MDS est bien reproductible avec la même seed
-            msg = "ERROR: The obtained clustering is not the one expected.\n" \
+            result_sklearn = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=False, random_state=rand_state)
+            result_spark = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=True, random_state=rand_state)
+
+            # Comparison of the results
+            condition_same_labels = result_sklearn == result_spark
+
+            # Case of labels switching: we have the same clustering but different labels.
+            # For example:
+            # {{'C1': {'tsuid_1': [...], 'tsuid_2': [...]}, {'C2': {'tsuid_3': [...], 'tsuid_4': [...]}}
+            # and
+            # {{'C2': {'tsuid_1': [...], 'tsuid_2': [...]}, {'C1': {'tsuid_3': [...], 'tsuid_4': [...]}}
+            condition_switched_labels = (result_sklearn['C1'] == result_spark['C2']) \
+                                        and (result_sklearn['C2'] == result_spark['C1'])
+            condition = condition_same_labels or condition_switched_labels
+            msg = "ERROR: Spark clustering and scikit-learn clustering are different\n" \
                   "Result sklearn = {} \n" \
                   "Result Spark ={}".format(result_sklearn, result_spark)
             self.assertEqual(np.all(condition), True, msg=msg)
