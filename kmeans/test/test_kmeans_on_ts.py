@@ -145,6 +145,15 @@ def gen_ts(ts_id):
                                np.array([temps, ts_b5]).T, np.array([temps, ts_c1]).T, np.array([temps, ts_c2]).T,
                                np.array([temps, ts_c3]).T, np.array([temps, ts_c4]).T, np.array([temps, ts_c5]).T],
                               np.float64)
+    # ---------------------------------------------------------------------------------
+    # CASE 5: 2 non aligned TS
+    # ---------------------------------------------------------------------------------
+    elif ts_id == 5:
+        ts_1 = [[1, 0], [2, 1], [3, 2]]
+        ts_2 = [[4, 3], [5, 4], [6, 5]]
+
+        ts_content = np.array([ts_1, ts_2], np.float64)
+
     else:
         raise NotImplementedError
     # ---------------------------------------------------------------------------------
@@ -160,7 +169,7 @@ def gen_ts(ts_id):
         my_ts = IkatsApi.ts.create(fid=current_fid, data=np.array(ts_content)[i, :, :])
         # Create metadatas 'qual_nb_points', 'name' and 'funcId'
         IkatsApi.md.create(tsuid=my_ts['tsuid'], name='qual_nb_points', value=len(ts_content), force_update=True)
-        IkatsApi.md.create(tsuid=my_ts['tsuid'], name='metric', value='metric_%s' % ts_id, force_update=True)
+        IkatsApi.md.create(tsuid=my_ts['tsuid'], name='qual_ref_period', value=1, force_update=True)
         IkatsApi.md.create(tsuid=my_ts['tsuid'], name='funcId', value=current_fid, force_update=True)
         if not my_ts['status']:
             raise SystemError("Error while creating TS %s" % ts_id)
@@ -202,6 +211,9 @@ class TestKmeansOnTS(unittest.TestCase):
             msg = "Testing arguments: Error in testing `ts_list` as empty list"
             with self.assertRaises(ValueError, msg=msg):
                 fit_kmeans_on_ts(ts_list=[], nb_clusters=2)
+
+            # TODO: ajouter un TU où l'on test le non alignement des TS (gen_ts(5))
+
             # ----------------------------
             # Argument `nb_clusters`
             # ----------------------------
@@ -262,6 +274,7 @@ class TestKmeansOnTS(unittest.TestCase):
         """
         rand_state = 1
         # TS creation
+        # Test on non aligned TS
         my_ts = gen_ts(1)
 
         try:

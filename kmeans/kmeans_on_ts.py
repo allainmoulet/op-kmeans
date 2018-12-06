@@ -31,6 +31,76 @@ from pyspark.ml.linalg import Vectors
 
 LOGGER = logging.getLogger(__name__)
 
+# TODO: TS doivent être alignées
+# TODO: `period` doit être dans les md de chaque TS
+
+
+def _check_alignement(tsuid_list):
+    """
+    Check the alignment of the provided list of TS (`tsuid_list`): same `start_date`, `end_date`, and `period`.
+    Operator `quality_stat` shall be launch on ts_list before !
+
+    :param tsuid_list: List of tsuid of TS to check
+    :type tsuid_list: List of str
+    ..Example: ['tsuid1', 'tsuid2', ...]
+
+    return: Tuple composed by:
+        * start date (int)
+        * end date (int)
+
+    :raises:
+        * ValueError: TS are not aligned
+        * ValueError: Some metadata are missing (start date, end date, nb points)
+
+    ..Note: First TS is the reference. Indeed, ALL TS must be aligned (so aligned to the first TS)
+    """
+    # Read metadata
+    meta_list = IkatsApi.md.read(tsuid_list)
+
+    # Perform operation iteratively on each TS
+    for tsuid in tsuid_list:
+
+        # 1/ Retrieve meta data and check available meta-data
+        # --------------------------------------------------------------------------
+        md = meta_list[tsuid]
+
+        # CASE 1: no md (sd, ed, nb_point) -> raise ValueError
+        if 'ikats_start_date' not in md.keys() and 'ikats_end_date' not in md.keys():
+            raise ValueError("No MetaData (start / end date) associated with tsuid {}... Is it an existing TS ?".format(tsuid))
+        # CASE 2: metadata `period` not available -> raise ValueError
+        elif 'qual_ref_period' not in md.keys():
+            raise ValueError("No MetaData `qual_ref_period` with tsuid {}... Please launch `quality indicator`".format(tsuid))
+        # CASE 3: OK (metadata `period` available...) -> continue
+        else:
+            period = int(float(md['qual_ref_period']))
+            sd = int(md['ikats_start_date'])
+            ed = int(md['ikats_end_date'])
+
+        # 2/ Check if data are aligned (same sd, ed, period)
+        # --------------------------------------------------------------------------
+        # CASE 1: First TS -> get as reference
+        if tsuid == tsuid_list[0]:
+            ref_sd = sd
+            ref_ed = ed
+            ref_period = period
+
+        # CASE 2: Other TS -> compared to the reference
+        else:
+            # Compare `sd`
+            if sd != ref_sd:
+                raise ValueError("TS {}, metadata `start_date` is {}:"
+                                 " not aligned with other TS (expected {})".format(tsuid, sd, ref_sd))
+            # Compare `ed`
+            elif ed != ref_ed:
+                raise ValueError("TS {}, metadata `end_date` is {}:"
+                                 " not aligned with other TS (expected {})".format(tsuid, ed, ref_ed))
+            # Compare `period`
+            elif period != ref_period:
+                raise ValueError("TS {}, metadata `ref_period` is {}:"
+                                 " not aligned with other TS (expected {})".format(tsuid, ed, ref_period))
+
+    return ref_sd, ref_ed
+
 
 def fit_kmeans_sklearn_internal(tsuid_list, n_cluster, random_state_kmeans=None):
     """
@@ -52,11 +122,17 @@ def fit_kmeans_sklearn_internal(tsuid_list, n_cluster, random_state_kmeans=None)
         series
     :rtype
         * model_sklearn: sklearn.cluster.k_means_.KMeans
-        * result_sklearn: pandas.DataFrame
+        * result_sklearn: pandas.core.frame.DataFrame
+
     """
     LOGGER.info(" --- Starting K-Means fit with scikit-learn --- ")
     try:
         start_loading_time = time.time()
+        # -------------------------------------------------------------
+        # 0 - Check TS alignment (ValueError instead)
+        # -------------------------------------------------------------
+        _check_alignement(tsuid_list)
+
         # -------------------------------------------------------------
         # 1 - Process the data in the shape needed by sklearn's K-Means
         # -------------------------------------------------------------
@@ -134,20 +210,24 @@ def fit_kmeans_sklearn_internal(tsuid_list, n_cluster, random_state_kmeans=None)
         # 5        1                                          C2  13   16 ...
         # Two last lines: the 2 centroids
         LOGGER.debug(" --- Finished fitting K-Means to data in: %.3f seconds --- ", time.time() - start_loading_time)
-        return model_sklearn, result_sklearn
+        # For now, do not return model
+        return result_sklearn  # model_sklearn
     finally:
         LOGGER.info("--- Finished to run fit_kmeans_spark_internal() function ---")
 
-# TODO: repercuter changement tsuid_list
-def fit_kmeans_spark_internal(tsuid_list, n_cluster, random_state_kmeans=None):
+
+def fit_kmeans_spark_internal(tsuid_list, n_cluster, nb_points_by_chunks, random_state_kmeans=None):
     """
     The internal wrapper to fit K-means on time series with Spark
 
     :param tsuid_list: List of tsuid to use
-    :type ts_list: list of str
+    :type tsuid_list: list of str
 
     :param n_cluster: the number of clusters to form
     :type n_cluster: int
+
+    :param nb_points_by_chunks: size of chunks in number of points (assuming time series is periodic and without holes)
+    :type nb_points_by_chunks: int
 
     :param random_state_kmeans: the seed used by the random number generator (if int) to make the results reproducible
     If None, the random number generator is the RandomState instance used by np.random
@@ -158,20 +238,23 @@ def fit_kmeans_spark_internal(tsuid_list, n_cluster, random_state_kmeans=None):
         data_df_spark: Data frame with indexes, and columns TSUID, VALUES and CLUSTER
         centroids_spark: The centroids of each class
 
-    :rtype
-        model: pyspark.ml.clustering.KMeansModel
-        data_df_spark: pandas.DataFrame
-        centroids_spark: numpy.ndarray # TODO : Plutôt sortir un dictionnaire avec les classes
+    :rtype data_df_spark: pandas.core.frame.DataFrame
+
     """
-    SSessionManager.get()
-    spark = SSessionManager.spark_session
-    spark.sparkContext.setLogLevel('WARN')
     LOGGER.info("--- Starting K-Means fit with Spark ---")
+    # -------------------------------------------------------------
+    # 0 - Check TS alignment (ValueError instead)
+    # -------------------------------------------------------------
+    _check_alignement(tsuid_list)
+
+
+    SSessionManager.get()
+
     try:
         start_loading_time = time.time()
-        # -----------------------------------------------------------
-        # 1 - Process the data in the shape needed by Spark's K-Means
-        # -----------------------------------------------------------
+        # retrieve spark context
+        sc = SSessionManager.get_context()
+
         # Perform operation iteratively on each TS
         data = []
         tsuid = []
@@ -223,18 +306,14 @@ def mds_representation_kmeans(data, random_state_mds=None):
 
     :param data:  Result of Kmeans fitting. Data frame with indexes, and columns CLUSTER_ID, TSUID, t_0, ..., t_n
     for the values of time
-    :type data: pandas.DataFrame
+    :type data: pandas.core.frame.DataFrame
 
     :param random_state_mds: the seed used by the random number generator (if int) to make the results reproducible
     If None, the random number generator is the RandomState instance used by np.random
     :type random_state_mds: int or NoneType
 
-    :return
-        pointsPosition: The position (x, y) of the initial dataset after the MDS transformation
-        centroidsPosition: The position (x, y) of the centroids after the MDS transformation
-    :rtype tuple with
-        pointsPosition: numpy.ndarray
-        centroidsPosition: numpy.ndarray
+    :return all_position: The position (x, y) of the initial dataset and of the centroids after the MDS transformation
+    :rtype all_position:: pandas.core.frame.DataFrame
     """
     LOGGER.info("--- Starting MultiDimensional Scaling (MDS) transformation ---")
 
@@ -291,7 +370,7 @@ def format_kmeans(all_positions, n_cluster):
 
     :param all_positions: All the point / centroid positions, stored into a DataFrame (columns:
     (CLUSTER_ID, TSUID, COMP_1, COMP_2)
-    :type all_positions: pandas.DataFrame
+    :type all_positions: pandas.core.frame.DataFrame
 
     :param n_cluster: the number of clusters to form
     :type n_cluster: int
@@ -381,6 +460,7 @@ def format_kmeans(all_positions, n_cluster):
     LOGGER.info("--- Finished to run format_kmeans() ---")
     return result
 
+
 def fit_kmeans_on_ts(ts_list, nb_clusters, random_state=None, nb_points_by_chunk=50000, spark=None):
     """
     Performs K-means algorithm on time series either with Spark either with scikit-learn.
@@ -458,12 +538,14 @@ def fit_kmeans_on_ts(ts_list, nb_clusters, random_state=None, nb_points_by_chunk
     # Arg `spark=None`: Check using criteria (nb_points and number of ts)
     if spark or (spark is None and SparkUtils.check_spark_usage(tsuid_list=tsuid_list, nb_ts_criteria=100,
                                                                 nb_points_by_chunk=nb_points_by_chunk)):
-        model, result_df = fit_kmeans_spark_internal(tsuid_list=tsuid_list,
-                                                     n_cluster=nb_clusters,
-                                                     random_state_kmeans=random_state)
+        result_df = fit_kmeans_spark_internal(tsuid_list=tsuid_list,
+                                              n_cluster=nb_clusters,
+                                              nb_points_by_chunks=nb_points_by_chunk,
+                                              random_state_kmeans=random_state)
     else:
-        model, result_df = fit_kmeans_sklearn_internal(tsuid_list=tsuid_list, n_cluster=nb_clusters,
-                                                       random_state_kmeans=random_state)
+        result_df = fit_kmeans_sklearn_internal(tsuid_list=tsuid_list,
+                                                n_cluster=nb_clusters,
+                                                random_state_kmeans=random_state)
     # ------------------------------------
     # 2 - Compute the MDS (Multidimensional scaling) (purpose : 2 dimensional visualisation)
     # ------------------------------------
