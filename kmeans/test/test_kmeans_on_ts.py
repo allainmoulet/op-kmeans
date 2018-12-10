@@ -338,7 +338,7 @@ class TestKmeansOnTS(unittest.TestCase):
         finally:
             self.clean_up_db(my_ts)
 
-    @unittest.skip
+    # @unittest.skip
     def test_kmeans_spark_result(self):
         """
         Test the result obtained for the sklearn version of the K-means algorithm on time series

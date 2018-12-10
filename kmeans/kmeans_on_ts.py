@@ -26,6 +26,8 @@ from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import euclidean_distances
 from sklearn.manifold import MDS
 
+from pyspark.sql.functions import udf, col
+from pyspark.sql.types import ArrayType, DoubleType
 from pyspark.ml.clustering import KMeans as KMeansSpark
 from pyspark.ml.linalg import Vectors
 
@@ -171,19 +173,19 @@ def fit_kmeans_sklearn_internal(tsuid_list, n_cluster, random_state_kmeans=None)
         # CLUSTER ID
         cluster_df = pd.DataFrame({'TSUID': tsuid_list, 'CLUSTER_ID': cluster_id})
         # Example:
-        #    CLUSTER                                       TSUID
+        #    CLUSTER_ID                                      TSUID
         # 0        0  2630EF00000100076C0000020006E0000003000771
         # ...
 
         # CENTROIDS
         centroids_df = pd.DataFrame(centroids_sklearn, columns=["t_" + str(i) for i in range(n_times)])
-        # Add the columns TSUID and CLUSTER before concatenation with centroids_df
+        # Add the columns TSUID and CLUSTER_IDbefore concatenation with centroids_df
         temp = pd.DataFrame({'TSUID': ['C' + str(i) for i in range(1, n_cluster + 1)], 'CLUSTER_ID': range(n_cluster)})
         # Column "TSUID" contains "C1", ..., "C{n_cluster}"
 
         centroids_df = pd.concat([temp, centroids_df], axis=1)
         # Example:
-        #    CLUSTER TSUID   t_0  ... t_n
+        #    CLUSTER_IDTSUID   t_0  ... t_n
         # 0        0   C1    8.0  ... 3.5
         # 1        1   C2   13.0  ... 16.0
         # ...
@@ -194,14 +196,14 @@ def fit_kmeans_sklearn_internal(tsuid_list, n_cluster, random_state_kmeans=None)
         # Concatenate these DF by columns
         result_sklearn = pd.concat([cluster_df, data_df], axis=1)
         # Example: result_sklearn =
-        #    CLUSTER                                       TSUID t_0 t_1
+        #    CLUSTER_ID                                      TSUID t_0 t_1
         # 0        0  2630EF00000100076C0000020006E0000003000771   7   3
         # ...
 
         # Add centroids at the end of the dataframe and reset of indexes
         result_sklearn = pd.concat([result_sklearn, centroids_df], ignore_index=True)
         # Example:
-        #    CLUSTER                                       TSUID t_0  t_1 ...
+        #    CLUSTER_ID                                      TSUID t_0  t_1 ...
         # 0        0  2630EF00000100076C0000020006E0000003000771   7    3
         # 1        0  14ED6B00000100076C0000020006E0000003000772   9    4
         # 2        1  B9C00C00000100076C0000020006E0000003000773  14   15
@@ -216,7 +218,7 @@ def fit_kmeans_sklearn_internal(tsuid_list, n_cluster, random_state_kmeans=None)
         LOGGER.info("--- Finished to run fit_kmeans_spark_internal() function ---")
 
 
-def fit_kmeans_spark_internal(tsuid_list, n_cluster, nb_points_by_chunks, random_state_kmeans=None):
+def fit_kmeans_spark_internal(tsuid_list, n_cluster, nb_ts_by_chunks, random_state_kmeans=None):
     """
     The internal wrapper to fit K-means on time series with Spark
 
@@ -226,8 +228,8 @@ def fit_kmeans_spark_internal(tsuid_list, n_cluster, nb_points_by_chunks, random
     :param n_cluster: the number of clusters to form
     :type n_cluster: int
 
-    :param nb_points_by_chunks: size of chunks in number of points (assuming time series is periodic and without holes)
-    :type nb_points_by_chunks: int
+    :param nb_ts_by_chunks: size of chunks in number of ts (assuming time series is periodic and without holes)
+    :type nb_ts_chunks: int
 
     :param random_state_kmeans: the seed used by the random number generator (if int) to make the results reproducible
     If None, the random number generator is the RandomState instance used by np.random
@@ -245,8 +247,8 @@ def fit_kmeans_spark_internal(tsuid_list, n_cluster, nb_points_by_chunks, random
     # -------------------------------------------------------------
     # 0 - Check TS alignment (ValueError instead)
     # -------------------------------------------------------------
-    _check_alignement(tsuid_list)
-
+    # All TS are aligned, get the start / end date of ref
+    sd, ed = _check_alignement(tsuid_list)
 
     SSessionManager.get()
 
@@ -255,45 +257,158 @@ def fit_kmeans_spark_internal(tsuid_list, n_cluster, nb_points_by_chunks, random
         # retrieve spark context
         sc = SSessionManager.get_context()
 
-        # Perform operation iteratively on each TS
-        data = []
-        tsuid = []
-        values = []
-        for i in ts_list:
-            # Read TS from it's TSUID; shape = (2, nrow)
-            ts_data = IkatsApi.ts.read([i['tsuid']])[0]
-            list_ts = [x[1] for x in ts_data]
-            # List for the column TSUID of the DataFrame
-            tsuid.append(i['tsuid'])
-            # List for the column VALUES of the DataFrame
-            values.append(list_ts)
-            vec_ts = Vectors.dense(list_ts)
-            data.append((vec_ts,))
-        # TODO: Voir ce qu'a fait Jules pour optimiser la structure des données en Spark Df
-        data_spark = spark.createDataFrame(data, ['time_series'])
+        # Get the number of partitions = n_ts / nb_ts_by_chunks
+        nb_chunks = max(1, int(len(tsuid_list) / nb_ts_by_chunks))
+
+        # Distribute the TS names (tsuid)
+        rdd_ts = sc.parallelize(tsuid_list, nb_chunks)
+
+        # 1/ Read entire TS, and put each TS into one DenseVector (1 TS per Vector)
+        def __map_extract(chunked_tsuid_list):
+            """
+            Extract data corresponding to `tsuid`, and return formatted result.
+            :param chunked_tsuid_list: The current tsuid_list of the ts to extract (str) in the current chunk
+            :return: tuple composed by:
+                * input `tsuid`
+                * DenseVector containing all data of `tsuid` (not timestamps)
+            """
+            # Extract values (not timestamps), and transform into list (avoid error with spark vs numpy)
+            # Extract data
+            ts_values = IkatsApi.ts.read(chunked_tsuid_list, sd=sd, ed=ed)
+            # Shape = (n_ts, n_times, 2) = (~ n_ts_by_chunk, n_times, 2)
+
+            # Get the DATA only
+            ts_values = np.array(ts_values)[:, :, 1]
+            # Shape = (n_ts, n_time)
+
+            # Transform into (Spark do not accept np.arrays !)
+            ts_values = ts_values.tolist()
+            # len = n_ts
+
+            # Build result: put into tuple each ts result (tsuid, values)
+            result = [(chunked_tsuid_list[i], Vectors.dense(ts_values[i])) for i in range(len(chunked_tsuid_list))]
+            # Result = [(tsuid1, Vectors.dense(ts_value1) ), ...]
+            return result
+
+        # DESCRIPTION: Extract TS
+        # INPUT  : tsuid list into an rdd
+        # OUTPUT : rdd containing [('tsuid', DenseVector([TS_VALUES]) ), ...]
+        rdd_ts_values = rdd_ts.mapPartitions(lambda x: __map_extract(list(x)))
+        # To limit the call `IkatsApi.read`, we apply the function on a list of TSUID
+        # To access to a list of TSUID, we use the mapPartitions (1 partition = list of `nb_ts_by_chunks` tsuid)
+        # In mapPartitions, `x` is an `iterator` (-> list(x) is the true list of TSUID)
+
+        # DESCRIPTION: Transform into DataFrame
+        # INPUT  : rdd containing [('tsuid', DenseVector([TS_VALUES]) ), ...]
+        # OUTPUT : Dataframe containing [TSUID: string, VALUES: vector]
+        df_spark = rdd_ts_values.toDF(['TSUID', 'VALUES'])
+
         # ---------------------
         # 2 - Fit the algorithm
         # ---------------------
-        kmeans_spark = KMeansSpark(featuresCol='time_series', k=n_cluster, seed=random_state_kmeans)
-        model_spark = kmeans_spark.fit(data_spark)
+        # Init model for performing Kmeans
+        # input column: 'VALUES'; output column = "CLUSTER_ID"
+        kmeans_spark = KMeansSpark(featuresCol='VALUES',predictionCol="CLUSTER_ID",
+                                   k=n_cluster, seed=random_state_kmeans)
+        # Fit model with data transformed
+        model_spark = kmeans_spark.fit(df_spark)
         LOGGER.info("--- Finished fitting K-Means to data ---")
         # --------------------------------
-        # 3 - Collect the centroids
+        # 3 - Cluster DATA
         # --------------------------------
         LOGGER.info("--- Exporting results to suitable format ---")
-        transformed = model_spark.transform(data_spark).select('time_series', 'prediction')
-        centroids_spark = np.array(model_spark.clusterCenters())
+        # DESCRIPTION: Cluster initial DataFrame
+        # INPUT  : Dataframe containing [TSUID: string, VALUES: vector] (col VALUES contains ts data per row)
+        # OUTPUT : Dataframe containing [TSUID: string, VALUES: vector, predic]
+        transformed = model_spark.transform(df_spark)
+
+        # Example:
+        # +--------------------+--------------------+----------+
+        # |               TSUID|              VALUES|CLUSTER_ID|
+        # +--------------------+--------------------+----------+
+        # |D73FA500000100000...|[0.05188564211130...|         0|
+        # ...
+
         # --------------------------
-        # 4 - Collect the clustering
+        # 4 - Collect the clustering and format data into pandas DatafFrame
         # --------------------------
-        result = transformed.collect()
-        predictions_list = []
-        for i in result:
-            predictions_list.append(i['prediction'])
-        LOGGER.info("--- Finished to export the results ---")
-        LOGGER.debug(" --- Finished fitting K-Means to data in: %.3f seconds --- ", time.time() - start_loading_time)
-        data_df_spark = pd.DataFrame({'TSUID': tsuid, 'VALUES': values, 'CLUSTER': predictions_list})
-        return model_spark, data_df_spark, centroids_spark
+        # Retrieve cluster centers
+        centroids_spark = pd.DataFrame(model_spark.clusterCenters())
+        # Example:
+        #          0         1         2         3         4         5         6   ...
+        # 0  0.074564 -0.056785 -0.012004 -0.048975 -0.019338 -0.024185  0.027072  ...
+        # ...
+
+        # Retrieve the nb of times (= number of col)
+        n_times = len(centroids_spark.columns.values)
+
+        # Rename columns into 't_{time}'
+        centroids_spark.columns = ["t_" + str(i) for i in range(n_times)]
+
+        # Add the columns TSUID and CLUSTER_ID before concatenation with centroids_df
+        temp = pd.DataFrame({'TSUID': ['C' + str(i) for i in range(1, n_cluster + 1)], 'CLUSTER_ID': range(n_cluster)})
+        # Column "TSUID" contains "C1", ..., "C{n_cluster}"
+        # Example:
+        #    CLUSTER_ID TSUID
+        # 0           0    C1
+        # 1           1    C2
+
+        # Concatenate at left the created columns 'TSUID' and 'CLUSTER_ID'
+        centroids_df = pd.concat([temp, centroids_spark], axis=1)
+        # Example:
+        #    CLUSTER_ID TSUID   t_0  ... t_n
+        # 0        0    C1      8.0  ... 3.5
+        # 1        1    C2     13.0  ... 16.0
+        # ...
+
+        # --------------------------
+        # 5 - Collect clustered data and format data into pandas DataFrame
+        # --------------------------
+        # A function that transform `vector` into `List` of double
+        vector_to_list = udf(lambda v: v.toArray().tolist(), ArrayType(DoubleType()))
+
+        # DESCRIPTION : Transorm column containing result (type Vector) into multiple columns
+        # INPUT  : A DataFrame with result columns ["Timestamp", _INPUT_COL, _OUTPUT_COL]: int, Vector, Vector
+        # OUTPUT : Same DF with muliple columns (one per PC):  ["Timestamp", _INPUT_COL, _OUTPUT_COL, PC1, ..., PC{k}]
+        result = transformed.withColumn("t_", vector_to_list(col("VALUES")))\
+            .select(["TSUID", "CLUSTER_ID"] + [col("t_")[i] for i in range(n_times)])
+        # Example:
+        # +--------------------+----------+--------------------+--------------------+--------------------+
+        # |               TSUID|CLUSTER_ID|               t_[0]|               t_[1]|               t_[2]| ...
+        # +--------------------+----------+--------------------+--------------------+--------------------+
+        # |D73FA500000100000...|         0| 0.05188564211130142|0.006946070585399866|-0.05263324826955795| ...
+        # ...
+
+        # Collect result and store into pandas DF
+        result = result.toPandas()
+        # Example:
+        #                                          TSUID  CLUSTER_ID     t_[0]  ...
+        # 0   D73FA5000001000001000002000002000003000009           0  0.051886  ...
+        # ...
+
+        # Rename columns
+        result.columns = ['TSUID', 'CLUSTER_ID'] + ["t_" + str(i) for i in range(n_times)]
+        # Example:
+        #                                          TSUID  CLUSTER_ID     t_0  ...
+        # 0   D73FA5000001000001000002000002000003000009           0  0.051886  ...
+        # ...
+
+        # ---------------------
+        # 6 - Concatenate all results into single DF
+        # ---------------------
+        # Add centroids at the end of the dataframe and reset of indexes
+        result_spark = pd.concat([result, centroids_df], ignore_index=True)
+        # Example:
+        #    CLUSTER_ID                                      TSUID t_0  t_1 ...
+        # 0        0  2630EF00000100076C0000020006E0000003000771   7    3
+        # 1        0  14ED6B00000100076C0000020006E0000003000772   9    4
+        # 2        1  B9C00C00000100076C0000020006E0000003000773  14   15
+        # 3        1  5F2C9B00000100076C0000020006E0000003000774  12   17
+        # 4        0                                          C1   8  3.5
+        # 5        1                                          C2  13   16 ...
+        # Two last lines: the 2 centroids
+
+        return result_spark
     finally:
         LOGGER.info("--- Finished to run fit_kmeans_spark_internal() function ---")
         SSessionManager.stop()
@@ -538,9 +653,11 @@ def fit_kmeans_on_ts(ts_list, nb_clusters, random_state=None, nb_points_by_chunk
     # Arg `spark=None`: Check using criteria (nb_points and number of ts)
     if spark or (spark is None and SparkUtils.check_spark_usage(tsuid_list=tsuid_list, nb_ts_criteria=100,
                                                                 nb_points_by_chunk=nb_points_by_chunk)):
+
+        # TODO: il faut convertir nb_points_by_chunk en nb_ts_by_chunk -> les TS sont extraites intégralement
         result_df = fit_kmeans_spark_internal(tsuid_list=tsuid_list,
                                               n_cluster=nb_clusters,
-                                              nb_points_by_chunks=nb_points_by_chunk,
+                                              nb_ts_by_chunks=nb_points_by_chunk,
                                               random_state_kmeans=random_state)
     else:
         result_df = fit_kmeans_sklearn_internal(tsuid_list=tsuid_list,
