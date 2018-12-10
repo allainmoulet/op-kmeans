@@ -17,15 +17,8 @@ limitations under the License.
 import unittest
 import numpy as np
 import logging
-import time
-
-# Import sk Kmeans
-import sklearn.cluster
-# Import pyspark kmeans
-import pyspark.ml.clustering
 
 from ikats.core.resource.api import IkatsApi
-from ikats.core.library.exception import IkatsConflictError
 from ikats.algo.kmeans.kmeans_on_ts import fit_kmeans_on_ts
 
 LOGGER = logging.getLogger()
@@ -192,6 +185,7 @@ class TestKmeansOnTS(unittest.TestCase):
             # Delete created TS
             IkatsApi.ts.delete(tsuid=ts_item['tsuid'], no_exception=True)
 
+    @unittest.skip
     def test_arguments_fit_kmeans_on_ts(self):
         """
         Test the behaviour when wrong arguments are given on fit_fit_kmeans_on_ts()
@@ -268,6 +262,7 @@ class TestKmeansOnTS(unittest.TestCase):
     # ------------------ #
     # OUTPUTS TYPE TESTS #
     # ------------------ #
+    @unittest.skip
     def test_kmeans_sklearn_output_type(self):
         """
         Test the 'type' of the results for the sklearn version of the K-means algorithm on time series
@@ -286,7 +281,6 @@ class TestKmeansOnTS(unittest.TestCase):
         finally:
             self.clean_up_db(my_ts)
 
-    @unittest.skip
     def test_kmeans_spark_output_type(self):
         """
         Test the 'type' of the results for the Spark version of the K-means algorithm on time series
@@ -324,11 +318,12 @@ class TestKmeansOnTS(unittest.TestCase):
 
             # TSUID associated to the first centroid
             tsuid_group = list(result_kmeans.get("C1").keys())
-            # Example: ['centroid', '14ED6B00000100076C0000020006E0000003000772', '2630EF00000100076C0000020006E0000003000771']
+            # Example:
+            # ['centroid', '14ED6B00000100076C0000020006E0000003000772', '2630EF00000100076C0000020006E0000003000771']
 
             # Check what TS are contained in the 1st cluster
             condition = all(x in tsuid_group for x in tsuid_list[0:2]) or \
-                        all(x in tsuid_group for x in tsuid_list[2:4])
+                all(x in tsuid_group for x in tsuid_list[2:4])
             self.assertTrue(condition, msg="ERROR: The obtained clustering is not the one expected")
 
             # Check if each cluster contains 2 time series
@@ -361,7 +356,7 @@ class TestKmeansOnTS(unittest.TestCase):
 
             # Check what TS are contained in the 1st cluster
             condition = all(x in tsuid_group for x in tsuid_list[0:2]) or \
-                        all(x in tsuid_group for x in tsuid_list[2:4])
+                all(x in tsuid_group for x in tsuid_list[2:4])
             self.assertTrue(condition, msg="ERROR: The obtained clustering is not the one expected")
 
             # Check if each cluster contains 2 time series

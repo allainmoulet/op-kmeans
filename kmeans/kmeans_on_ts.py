@@ -18,14 +18,11 @@ import time
 import numpy as np
 import pandas as pd
 import logging
-
 from ikats.core.library.spark import SSessionManager, SparkUtils
 from ikats.core.resource.api import IkatsApi
-
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import euclidean_distances
 from sklearn.manifold import MDS
-
 from pyspark.sql.functions import udf, col
 from pyspark.sql.types import ArrayType, DoubleType
 from pyspark.ml.clustering import KMeans as KMeansSpark
@@ -33,14 +30,68 @@ from pyspark.ml.linalg import Vectors
 
 LOGGER = logging.getLogger(__name__)
 
-# TODO: doc:
-# TODO: TS doivent être alignées
-# TODO: `period` doit être dans les md de chaque TS
+"""
+    K-Means Algorithm on Time Series
+    ================================
+    The wrapper fit_kmeans_on_ts() calls the 3 parts :
+        * 1 - The K-means algorithm - fit_kmeans_sklearn_internal() or fit_kmeans_spark_internal()
+        Regarding the number of time series and the number of points inside them, the wrapper chooses automatically to 
+        use either the sklearn version, either the Spark one.
+        * 2 - The MDS (MultiDimensional Scaling) - mds_representation_kmeans()
+        Translates the TS to 2-dimensional values for the visualisation.
+        * 3 - The format step - format_kmeans() 
+        Formats the results to the good format (for more details, see the docstring of this function)
+        
+    ..note::
+        The 'qual_ref_period' metadata must be in every time serie's metadata. That means that the user has to run the
+        'Quality Indicators' operator before using this one.
+    
+    ..note:: 
+        This algorithm is designed for time series. They have to be aligned, that is to say with the same number of
+        points and the exact same timestamps. The function _check_alignment() is called in the beginning of the k-means 
+        step.
+        
+    ..note::
+        We don't use normalisation on the time series, because we want to calculate distances between them and the
+        centroids obtained through the K-means algorithm. For now, the Euclidian distance is used in both k-means and
+        MDS steps.
+             
+    ..note::
+        As the classification is non supervised, label switching cases may occur. That means, if we run the algorithm
+        several times, we may get the same clustering but with different names for the clusters:
+        example with 4 time series A, B, C, D and 2 clusters:
+        {'C1': {'A':..., 'B':..., 'centroid':...}, 'C2': {'C':..., 'D':..., 'centroid':...}} 
+        and
+        {'C1': {'C':..., 'D':..., 'centroid':...}, 'C2': {'A':..., 'B':..., 'centroid':...}}
+        are in fact the same result. Only the label of the clusters has been switched.
+
+    ..note::
+        For the build of partitions on Spark for the K-means algorithm, here what is done:
+        a - We use the argument `nb_points_by_chunk` of the wrapper fit_kmeans_on_ts() . Default is 50000.
+        b - The function _check_alignment returns among other, `nb_points`, the number of points in one time serie.
+        c - We calculate `nb_ts_by_chunk`, the number of TS we can put in one chunk: `nb_points_by_chunk` / `nb_points`. 
+            This number must be at least 1. So we take the maximum between 1 and `nb_points_by_chunk` / `nb_points`.
+            Extreme example: if TS has more points than specified for 1 chunk, we will distribute 1 TS by chunk.
+        d - We calculate `nb_chunks`, the number of chunks we have to use by dividing the number of TS by the number of
+            TS per chunk: `nb_ts` / `nb_ts_by_chunk`. 
+            This number must be at least 1. So we take the maximum between 1 and `nb_ts` / `nb_ts_by_chunk`.
+            Extreme example: if we have less TS than the number of TS we can put in one chunk, we simply take 1 chunk.  
+
+    Here are the improvements that can be performed:
+        * There is nothing to help the user for the choice of K, the number of clusters. We could use the "elbow method"
+        as explained here: https://pythonprogramminglanguage.com/kmeans-elbow-method/ . This method implies to run the
+        algorithm for several values of K, and to choose the best one. Regarding data, it can be computational costly.
+        * The Euclidian distance is used everywhere to quantify the distance between TS. The Dynamic Time Warping (DWT)
+        distance should be prefered.
+        * The K-means algorithm is sensible to initialisation, that means we can have different results on the same data
+        It can theoretically converge to a local minimum. The use of the seed allows to get reproducible results.
+        
+    .. note::
+        Warning: all TS are named by their TSUID
 """
 
-"""
 
-def _check_alignement(tsuid_list):
+def _check_alignment(tsuid_list):
     """
     Check the alignment of the provided list of TS (`tsuid_list`): same `start_date`, `end_date`, and `period`.
     Operator `quality_stat` shall be launch on ts_list before !
@@ -60,22 +111,28 @@ def _check_alignement(tsuid_list):
 
     ..Note: First TS is the reference. Indeed, ALL TS must be aligned (so aligned to the first TS)
     """
+    # Initialisation (warnings are risen if not)
+    ref_sd = None
+    ref_ed = None
+    ref_period = None
+    nb_points = None
     # Read metadata
     meta_list = IkatsApi.md.read(tsuid_list)
-
     # Perform operation iteratively on each TS
     for tsuid in tsuid_list:
-
         # 1/ Retrieve meta data and check available meta-data
         # --------------------------------------------------------------------------
         md = meta_list[tsuid]
-
         # CASE 1: no md (sd, ed, nb_point) -> raise ValueError
         if 'ikats_start_date' not in md.keys() and 'ikats_end_date' not in md.keys():
-            raise ValueError("No MetaData (start / end date) associated with tsuid {}... Is it an existing TS ?".format(tsuid))
+            raise ValueError(
+                "No MetaData (start / end date) associated with tsuid {}... Is it an existing TS ?".format(tsuid)
+            )
         # CASE 2: metadata `period` not available -> raise ValueError
         elif 'qual_ref_period' not in md.keys():
-            raise ValueError("No MetaData `qual_ref_period` with tsuid {}... Please launch `quality indicator`".format(tsuid))
+            raise ValueError(
+                "No MetaData `qual_ref_period` with tsuid {}... Please launch `quality indicator`".format(tsuid)
+            )
         # CASE 3: OK (metadata `period` available...) -> continue
         else:
             period = int(float(md['qual_ref_period']))
@@ -83,7 +140,6 @@ def _check_alignement(tsuid_list):
             ed = int(md['ikats_end_date'])
             nb_points = int(md['qual_nb_points'])
             # ..Note: no test is performed on `nb_points` values (no need), just need it as output
-
         # 2/ Check if data are aligned (same sd, ed, period)
         # --------------------------------------------------------------------------
         # CASE 1: First TS -> get as reference
@@ -91,7 +147,6 @@ def _check_alignement(tsuid_list):
             ref_sd = sd
             ref_ed = ed
             ref_period = period
-
         # CASE 2: Other TS -> compared to the reference
         else:
             # Compare `sd`
@@ -106,7 +161,6 @@ def _check_alignement(tsuid_list):
             elif period != ref_period:
                 raise ValueError("TS {}, metadata `ref_period` is {}:"
                                  " not aligned with other TS (expected {})".format(tsuid, ed, ref_period))
-
     return ref_sd, ref_ed, nb_points
 
 
@@ -139,8 +193,7 @@ def fit_kmeans_sklearn_internal(tsuid_list, n_cluster, random_state_kmeans=None)
         # -------------------------------------------------------------
         # 0 - Check TS alignment (ValueError instead)
         # -------------------------------------------------------------
-        _check_alignement(tsuid_list)
-
+        _check_alignment(tsuid_list)
         # -------------------------------------------------------------
         # 1 - Process the data in the shape needed by sklearn's K-Means
         # -------------------------------------------------------------
@@ -191,9 +244,9 @@ def fit_kmeans_sklearn_internal(tsuid_list, n_cluster, random_state_kmeans=None)
 
         centroids_df = pd.concat([temp, centroids_df], axis=1)
         # Example:
-        #    CLUSTER_IDTSUID   t_0  ... t_n
-        # 0        0   C1    8.0  ... 3.5
-        # 1        1   C2   13.0  ... 16.0
+        #     CLUSTER_ID TSUID   t_0  ... t_n
+        # 0            0   C1    8.0  ... 3.5
+        # 1            1   C2   13.0  ... 16.0
         # ...
 
         # ---------------------
@@ -234,7 +287,8 @@ def fit_kmeans_spark_internal(tsuid_list, n_cluster, nb_pt_by_chunk, random_stat
     :param n_cluster: the number of clusters to form
     :type n_cluster: int
 
-    :param nb_pt_by_chunk: size of chunks in number of points (assuming time series is periodic and without holes)
+    :param nb_pt_by_chunk: size of chunks in number of points. We assume taht the time series don't have holes and have
+     equidistant times.
     :type nb_pt_by_chunk: int
 
     :param random_state_kmeans: the seed used by the random number generator (if int) to make the results reproducible
@@ -254,15 +308,11 @@ def fit_kmeans_spark_internal(tsuid_list, n_cluster, nb_pt_by_chunk, random_stat
     # 0 - Check TS alignment (ValueError instead)
     # -------------------------------------------------------------
     # All TS are aligned, get the start / end date of ref
-    sd, ed, nb_points = _check_alignement(tsuid_list)
-
+    sd, ed, nb_points = _check_alignment(tsuid_list)
     SSessionManager.get()
-
     try:
-        start_loading_time = time.time()
         # retrieve spark context
         sc = SSessionManager.get_context()
-
         # Get the number of TS by partition = nb_pt_by_chunk / nb_points
         nb_ts_by_chunk = max(1, int(nb_pt_by_chunk / nb_points))
         # If nb_points > nb_pt_by_chunk -> nb_ts_by_chunk = 1
@@ -297,9 +347,9 @@ def fit_kmeans_spark_internal(tsuid_list, n_cluster, nb_pt_by_chunk, random_stat
             # len = n_ts
 
             # Build result: put into tuple each ts result (tsuid, values)
-            result = [(chunked_tsuid_list[i], Vectors.dense(ts_values[i])) for i in range(len(chunked_tsuid_list))]
+            res = [(chunked_tsuid_list[i], Vectors.dense(ts_values[i])) for i in range(len(chunked_tsuid_list))]
             # Result = [(tsuid1, Vectors.dense(ts_value1) ), ...]
-            return result
+            return res
 
         # DESCRIPTION: Extract TS
         # INPUT  : tsuid list into an rdd
@@ -319,7 +369,7 @@ def fit_kmeans_spark_internal(tsuid_list, n_cluster, nb_pt_by_chunk, random_stat
         # ---------------------
         # Init model for performing Kmeans
         # input column: 'VALUES'; output column = "CLUSTER_ID"
-        kmeans_spark = KMeansSpark(featuresCol='VALUES',predictionCol="CLUSTER_ID",
+        kmeans_spark = KMeansSpark(featuresCol='VALUES', predictionCol="CLUSTER_ID",
                                    k=n_cluster, seed=random_state_kmeans)
         # Fit model with data transformed
         model_spark = kmeans_spark.fit(df_spark)
@@ -460,10 +510,6 @@ def mds_representation_kmeans(data, random_state_mds=None):
     # Compute MDS
     position = mds.fit_transform(mat_dist)
     # Shape = (n_ts + n_cluster, 2) -> 2 = MDS.n_components
-
-    # Retrieve the total number of rows in `data`
-    n_row = position.shape[0]  # n_ts + n_cluster
-
     LOGGER.info("--- Finished MDS transformation ---")
 
     # -----------------------------------------------------------
@@ -550,13 +596,13 @@ def format_kmeans(all_positions, n_cluster):
         result[c] = {}
 
         # Get the row of `centroids_positions` containing data about the current centroid
-        current_centroid = centroids_positions[centroids_positions["TSUID"]==c]
+        current_centroid = centroids_positions[centroids_positions["TSUID"] == c]
         # Example :
         #    CLUSTER_ID TSUID    COMP_1    COMP_2
         # 4           0    C1  5.432918 -4.133372
 
-        # Retrieve the position [x, y] of the current centroid
-        result[c]['centroid'] = current_centroid[['COMP_1', 'COMP_2']].values[0]
+        # Retrieve the position [x, y] of the current centroid, convert result into LIST (make result JSON serializable)
+        result[c]['centroid'] = list(current_centroid[['COMP_1', 'COMP_2']].values[0])
         # Example: array([ 5.43291802, -4.13337188])
 
         # Retrieve current CLUSTER ID
@@ -569,13 +615,13 @@ def format_kmeans(all_positions, n_cluster):
         #    CLUSTER_ID                                       TSUID    COMP_1    COMP_2
         # 0           0  2630EF00000100076C0000020006E0000003000771  5.278414 -5.459057
         # 1           0  14ED6B00000100076C0000020006E0000003000772  4.695608 -3.467254
-        for index in  current_lines.index:  # 0, 1
+        for index in current_lines.index:  # 0, 1
             # tsuid TO STORE
             current_tsuid = current_lines.loc[index, "TSUID"]
             # Example: "2630EF00000100076C0000020006E0000003000771"
 
-            # [x, y] of the current TS to store
-            values = current_lines.loc[index, ['COMP_1', 'COMP_2']].values
+            # [x, y] of the current TS to store, convert result into LIST (make result JSON serializable)
+            values = list(current_lines.loc[index, ['COMP_1', 'COMP_2']].values)
             # Example: array([5.278414219776018, -5.459056529052045], dtype=object)
 
             # UPDATE `result[c]`
@@ -683,5 +729,5 @@ def fit_kmeans_on_ts(ts_list, nb_clusters, random_state=None, nb_points_by_chunk
     # -----------------------
     result = format_kmeans(all_positions=all_positions, n_cluster=nb_clusters)
 
-    # For now, model is not outputed
-    return result  #, model
+    # For now, model is not outputed. If we do so: return result, model
+    return result
