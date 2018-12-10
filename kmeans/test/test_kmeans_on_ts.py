@@ -371,11 +371,12 @@ class TestKmeansOnTS(unittest.TestCase):
         finally:
             self.clean_up_db(my_ts)
 
-    @unittest.skip
     def test_diff_sklearn_spark(self):
         """
         Test the difference of result between the functions kmeans_spark() and kmeans_sklearn() on time series.
         The same result should be obtained with both ways.
+        Just test clustering, not MDS 2-dimensional representation.
+        ..Note: MDS 2-dimensional transformation result is not tested.
         """
         # Used for reproducible results
         rand_state = 1
@@ -387,20 +388,27 @@ class TestKmeansOnTS(unittest.TestCase):
             result_sklearn = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=False, random_state=rand_state)
             result_spark = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=True, random_state=rand_state)
 
-            # Comparison of the results
-            condition_same_labels = result_sklearn == result_spark
+            # Comparison of the results: CASE 1: `result_sklearn['C1']`
+            # Because MDS transformation is sensitive to the order, a label switching can cause differences in
+            # results
+            condition_same_labels = (result_sklearn['C1'].keys()) == set(result_spark['C1'].keys())
+            condition_switched_labels = (result_sklearn['C1'].keys()) == set(result_spark['C2'].keys())
 
             # Case of labels switching: we have the same clustering but different labels.
-            # For example:
-            # {{'C1': {'tsuid_1': [...], 'tsuid_2': [...]}, {'C2': {'tsuid_3': [...], 'tsuid_4': [...]}}
-            # and
-            # {{'C2': {'tsuid_1': [...], 'tsuid_2': [...]}, {'C1': {'tsuid_3': [...], 'tsuid_4': [...]}}
-            condition_switched_labels = (result_sklearn['C1'] == result_spark['C2']) \
-                                        and (result_sklearn['C2'] == result_spark['C1'])
+            # Example:
+            # result_sklearn = {{'C1': {'tsuid_1':[...], 'tsuid_2': [...]}, {'C2': {'tsuid_3': [...], 'tsuid_4': [...]}}
+            # result_spark = {{'C2': {'tsuid_1': [...], 'tsuid_2': [...]}, {'C1': {'tsuid_3': [...], 'tsuid_4': [...]}}
             condition = condition_same_labels or condition_switched_labels
             msg = "ERROR: Spark clustering and scikit-learn clustering are different\n" \
                   "Result sklearn = {} \n" \
                   "Result Spark ={}".format(result_sklearn, result_spark)
-            self.assertEqual(np.all(condition), True, msg=msg)
+            self.assertTrue(condition, msg=msg)
+
+            # CASE 2: `result_sklearn['C2']`
+            condition_same_labels = (result_sklearn['C2'].keys()) == set(result_spark['C2'].keys())
+            condition_switched_labels = (result_sklearn['C2'].keys()) == set(result_spark['C1'].keys())
+            condition = condition_same_labels or condition_switched_labels
+            self.assertTrue(condition, msg=msg)
+
         finally:
             self.clean_up_db(my_ts)

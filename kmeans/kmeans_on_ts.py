@@ -33,9 +33,12 @@ from pyspark.ml.linalg import Vectors
 
 LOGGER = logging.getLogger(__name__)
 
+# TODO: doc:
 # TODO: TS doivent être alignées
 # TODO: `period` doit être dans les md de chaque TS
+"""
 
+"""
 
 def _check_alignement(tsuid_list):
     """
@@ -49,6 +52,7 @@ def _check_alignement(tsuid_list):
     return: Tuple composed by:
         * start date (int)
         * end date (int)
+        * number of points (int)
 
     :raises:
         * ValueError: TS are not aligned
@@ -77,6 +81,8 @@ def _check_alignement(tsuid_list):
             period = int(float(md['qual_ref_period']))
             sd = int(md['ikats_start_date'])
             ed = int(md['ikats_end_date'])
+            nb_points = int(md['qual_nb_points'])
+            # ..Note: no test is performed on `nb_points` values (no need), just need it as output
 
         # 2/ Check if data are aligned (same sd, ed, period)
         # --------------------------------------------------------------------------
@@ -101,7 +107,7 @@ def _check_alignement(tsuid_list):
                 raise ValueError("TS {}, metadata `ref_period` is {}:"
                                  " not aligned with other TS (expected {})".format(tsuid, ed, ref_period))
 
-    return ref_sd, ref_ed
+    return ref_sd, ref_ed, nb_points
 
 
 def fit_kmeans_sklearn_internal(tsuid_list, n_cluster, random_state_kmeans=None):
@@ -218,7 +224,7 @@ def fit_kmeans_sklearn_internal(tsuid_list, n_cluster, random_state_kmeans=None)
         LOGGER.info("--- Finished to run fit_kmeans_spark_internal() function ---")
 
 
-def fit_kmeans_spark_internal(tsuid_list, n_cluster, nb_ts_by_chunks, random_state_kmeans=None):
+def fit_kmeans_spark_internal(tsuid_list, n_cluster, nb_pt_by_chunk, random_state_kmeans=None):
     """
     The internal wrapper to fit K-means on time series with Spark
 
@@ -228,8 +234,8 @@ def fit_kmeans_spark_internal(tsuid_list, n_cluster, nb_ts_by_chunks, random_sta
     :param n_cluster: the number of clusters to form
     :type n_cluster: int
 
-    :param nb_ts_by_chunks: size of chunks in number of ts (assuming time series is periodic and without holes)
-    :type nb_ts_chunks: int
+    :param nb_pt_by_chunk: size of chunks in number of points (assuming time series is periodic and without holes)
+    :type nb_pt_by_chunk: int
 
     :param random_state_kmeans: the seed used by the random number generator (if int) to make the results reproducible
     If None, the random number generator is the RandomState instance used by np.random
@@ -248,7 +254,7 @@ def fit_kmeans_spark_internal(tsuid_list, n_cluster, nb_ts_by_chunks, random_sta
     # 0 - Check TS alignment (ValueError instead)
     # -------------------------------------------------------------
     # All TS are aligned, get the start / end date of ref
-    sd, ed = _check_alignement(tsuid_list)
+    sd, ed, nb_points = _check_alignement(tsuid_list)
 
     SSessionManager.get()
 
@@ -257,8 +263,13 @@ def fit_kmeans_spark_internal(tsuid_list, n_cluster, nb_ts_by_chunks, random_sta
         # retrieve spark context
         sc = SSessionManager.get_context()
 
-        # Get the number of partitions = n_ts / nb_ts_by_chunks
-        nb_chunks = max(1, int(len(tsuid_list) / nb_ts_by_chunks))
+        # Get the number of TS by partition = nb_pt_by_chunk / nb_points
+        nb_ts_by_chunk = max(1, int(nb_pt_by_chunk / nb_points))
+        # If nb_points > nb_pt_by_chunk -> nb_ts_by_chunk = 1
+
+        # Get the number of chunks = nb_ts / nb_ts_by_chunk
+        nb_chunks = max(1, int(len(tsuid_list) / nb_ts_by_chunk))
+        # If nb_ts < nb_ts_by_chunk -> nb_chunks = 1
 
         # Distribute the TS names (tsuid)
         rdd_ts = sc.parallelize(tsuid_list, nb_chunks)
@@ -654,10 +665,9 @@ def fit_kmeans_on_ts(ts_list, nb_clusters, random_state=None, nb_points_by_chunk
     if spark or (spark is None and SparkUtils.check_spark_usage(tsuid_list=tsuid_list, nb_ts_criteria=100,
                                                                 nb_points_by_chunk=nb_points_by_chunk)):
 
-        # TODO: il faut convertir nb_points_by_chunk en nb_ts_by_chunk -> les TS sont extraites intégralement
         result_df = fit_kmeans_spark_internal(tsuid_list=tsuid_list,
                                               n_cluster=nb_clusters,
-                                              nb_ts_by_chunks=nb_points_by_chunk,
+                                              nb_pt_by_chunk=nb_points_by_chunk,
                                               random_state_kmeans=random_state)
     else:
         result_df = fit_kmeans_sklearn_internal(tsuid_list=tsuid_list,
