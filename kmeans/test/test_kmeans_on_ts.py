@@ -12,12 +12,12 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
 """
+
 import unittest
 import numpy as np
 import logging
-
+# IKATS import
 from ikats.core.resource.api import IkatsApi
 from ikats.algo.kmeans.kmeans_on_ts import fit_kmeans_on_ts
 
@@ -46,107 +46,47 @@ def gen_ts(ts_id):
     # Build TS identifier
     fid = 'UNIT_TEST_K-MEANS_%s' % ts_id
     # -----------------------------------------------------------------------------
-    # CASE 0: 4 TS divided in 2 groups of 2 with 2 points per TS without randomness. Used for test_diff_sklearn_spark().
-    # shape = (4, 2, 2)
-    # -----------------------------------------------------------------------------
-    if ts_id == 0:
-        temps = list(range(1, 3))
-        ts_a1 = [7, 3]
-        ts_a2 = [9, 4]
-        ts_b1 = [14, 15]
-        ts_b2 = [12, 17]
-        ts_content = np.array([np.array([temps, ts_a1]).T,
-                               np.array([temps, ts_a2]).T,
-                               np.array([temps, ts_b1]).T,
-                               np.array([temps, ts_b2]).T], np.float64)
-
-    # -----------------------------------------------------------------------------
     # CASE 1: 4 TS divided in 2 groups of 2 with 2 points per TS. shape = (4, 2, 2)
     # -----------------------------------------------------------------------------
-    elif ts_id == 1:
-        temps = list(range(1, 3))
-        ts_a1 = [7, 3]
-        ts_a2 = list(ts_a1 + np.random.normal(0, 1, size=len(ts_a1)))
-        ts_b1 = [14, 13]
-        ts_b2 = list(ts_b1 + np.random.normal(0, 1, size=len(ts_b1)))
-        ts_content = np.array([np.array([temps, ts_a1]).T,
-                               np.array([temps, ts_a2]).T,
-                               np.array([temps, ts_b1]).T,
-                               np.array([temps, ts_b2]).T], np.float64)
+    if ts_id == 1:
+        ts_a1 = np.array(([10000, 7], [11000, 3]))
+        ts_a2 = np.array(([10000, 9], [11000, 4]))
+        ts_b1 = np.array(([10000, 14], [11000, 15]))
+        ts_b2 = np.array(([10000, 12], [21000, 17]))
+        ts_content = np.array([ts_a1, ts_a2, ts_b1, ts_b2], np.float64)
     # -------------------------------------------------------------------------------
     # CASE 2: 4 TS divided in 2 groups of 2 with 10 points per TS. shape = (4, 10, 2)
     # -------------------------------------------------------------------------------
     elif ts_id == 2:
-        temps = list(range(1, 11))
-        ts_a1 = [7, 3, 4, 9, 5, 6, 1, 0, 1, 2]
-        ts_a2 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
-        ts_b1 = [14, 13, 15, 15, 20, 30, 42, 43, 47, 50]
-        ts_b2 = ts_b1 + np.random.normal(0, 1, size=len(ts_a1))
-        ts_content = np.array([np.array([temps, ts_a1]).T,
-                               np.array([temps, ts_a2]).T,
-                               np.array([temps, ts_b1]).T,
-                               np.array([temps, ts_b2]).T], np.float64)
-    # -------------------------------------------------------------------------------
-    # CASE 3: 15 TS divided in 3 groups of 5 with 2 points per TS. shape = (15, 2, 2)
-    # -------------------------------------------------------------------------------
+        ts_a1 = np.array(([10000, 7], [11000, 3], [12000, 4], [13000, 9], [14000, 5], [15000, 6], [16000, 1],
+                          [17000, 0], [18000, 1], [19000, 2]))
+        ts_a2 = np.array(([10000, 6], [11000, 5], [12000, 5], [13000, 7], [14000, 6], [15000, 5], [16000, 2],
+                          [17000, 1], [18000, 2], [19000, 1]))
+        ts_b1 = np.array(([10000, 14], [11000, 13], [12000, 15], [13000, 15], [14000, 20], [15000, 30], [16000, 42],
+                          [17000, 43], [18000, 47], [19000, 50]))
+        ts_b2 = np.array(([10000, 12], [11000, 10], [12000, 14], [13000, 18], [14000, 19], [15000, 26], [16000, 41],
+                          [17000, 45], [18000, 46], [19000, 51]))
+        ts_content = np.array([ts_a1, ts_a2, ts_b1, ts_b2], np.float64)
+    # -----------------------------------------------------------------------------
+    # CASE 3: 6 TS divided in 3 groups of 2 with 2 points per TS. shape = (6, 2, 2)
+    # -----------------------------------------------------------------------------
     elif ts_id == 3:
-        temps = list(range(1, 3))
-        ts_a1 = [7, 3]
-        ts_a2 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
-        ts_a3 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
-        ts_a4 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
-        ts_a5 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
-        ts_b1 = [14, 13]
-        ts_b2 = ts_b1 + np.random.normal(0, 1, size=len(ts_b1))
-        ts_b3 = ts_b1 + np.random.normal(0, 1, size=len(ts_b1))
-        ts_b4 = ts_b1 + np.random.normal(0, 1, size=len(ts_b1))
-        ts_b5 = ts_b1 + np.random.normal(0, 1, size=len(ts_b1))
-        ts_c1 = [50, 55]
-        ts_c2 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
-        ts_c3 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
-        ts_c4 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
-        ts_c5 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
-        ts_content = np.array([np.array([temps, ts_a1]).T, np.array([temps, ts_a2]).T, np.array([temps, ts_a3]).T,
-                               np.array([temps, ts_a4]).T, np.array([temps, ts_a5]).T, np.array([temps, ts_b1]).T,
-                               np.array([temps, ts_b2]).T, np.array([temps, ts_b3]).T, np.array([temps, ts_b4]).T,
-                               np.array([temps, ts_b5]).T, np.array([temps, ts_c1]).T, np.array([temps, ts_c2]).T,
-                               np.array([temps, ts_c3]).T, np.array([temps, ts_c4]).T, np.array([temps, ts_c5]).T],
-                              np.float64)
+        ts_a1 = np.array(([10000, 7], [11000, 3]))
+        ts_a2 = np.array(([10000, 9], [11000, 4]))
+        ts_b1 = np.array(([10000, 14], [11000, 15]))
+        ts_b2 = np.array(([10000, 12], [11000, 17]))
+        ts_c1 = np.array(([10000, 26], [11000, 4]))
+        ts_c2 = np.array(([10000, 24], [11000, 2]))
+        ts_content = np.array([ts_a1, ts_a2, ts_b1, ts_b2, ts_c1, ts_c2], np.float64)
     # ---------------------------------------------------------------------------------
-    # CASE 4: 15 TS divided in 3 groups of 5 with 10 points per TS. shape = (15, 10, 2)
+    # CASE 4: non aligned TS to be used in the test test_alignment(). shape = (4, 2, 2)
     # ---------------------------------------------------------------------------------
     elif ts_id == 4:
-        temps = list(range(1, 11))
-        ts_a1 = [7, 3, 4, 9, 5, 6, 1, 0, 1, 2]
-        ts_a2 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
-        ts_a3 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
-        ts_a4 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
-        ts_a5 = ts_a1 + np.random.normal(0, 1, size=len(ts_a1))
-        ts_b1 = [14, 13, 15, 15, 20, 30, 42, 43, 47, 50]
-        ts_b2 = ts_b1 + np.random.normal(0, 1, size=len(ts_b1))
-        ts_b3 = ts_b1 + np.random.normal(0, 1, size=len(ts_b1))
-        ts_b4 = ts_b1 + np.random.normal(0, 1, size=len(ts_b1))
-        ts_b5 = ts_b1 + np.random.normal(0, 1, size=len(ts_b1))
-        ts_c1 = [50, 55, 54, 52, 59, 57, 51, 55, 52, 58]
-        ts_c2 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
-        ts_c3 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
-        ts_c4 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
-        ts_c5 = ts_c1 + np.random.normal(0, 1, size=len(ts_c1))
-        ts_content = np.array([np.array([temps, ts_a1]).T, np.array([temps, ts_a2]).T, np.array([temps, ts_a3]).T,
-                               np.array([temps, ts_a4]).T, np.array([temps, ts_a5]).T, np.array([temps, ts_b1]).T,
-                               np.array([temps, ts_b2]).T, np.array([temps, ts_b3]).T, np.array([temps, ts_b4]).T,
-                               np.array([temps, ts_b5]).T, np.array([temps, ts_c1]).T, np.array([temps, ts_c2]).T,
-                               np.array([temps, ts_c3]).T, np.array([temps, ts_c4]).T, np.array([temps, ts_c5]).T],
-                              np.float64)
-    # ---------------------------------------------------------------------------------
-    # CASE 5: 2 non aligned TS
-    # ---------------------------------------------------------------------------------
-    elif ts_id == 5:
-        ts_1 = [[1, 0], [2, 1], [3, 2]]
-        ts_2 = [[4, 3], [5, 4], [6, 5]]
-
-        ts_content = np.array([ts_1, ts_2], np.float64)
-
+        ts_a1 = np.array(([10000, 7], [11000, 3]))
+        ts_a2 = np.array(([20000, 9], [21000, 4]))
+        ts_b1 = np.array(([10000, 14], [11000, 15]))
+        ts_b2 = np.array(([40000, 12], [50000, 17]))
+        ts_content = np.array([ts_a1, ts_a2, ts_b1, ts_b2], np.float64)
     else:
         raise NotImplementedError
     # ---------------------------------------------------------------------------------
@@ -157,7 +97,6 @@ def gen_ts(ts_id):
 
         # `fid` must be unique for each TS
         current_fid = fid + '_TS_' + str(i + 1)
-
         # Create TS
         my_ts = IkatsApi.ts.create(fid=current_fid, data=np.array(ts_content)[i, :, :])
         # Create metadatas 'qual_nb_points', 'name' and 'funcId'
@@ -205,9 +144,6 @@ class TestKmeansOnTS(unittest.TestCase):
             msg = "Testing arguments: Error in testing `ts_list` as empty list"
             with self.assertRaises(ValueError, msg=msg):
                 fit_kmeans_on_ts(ts_list=[], nb_clusters=2)
-
-            # TODO: ajouter un TU où l'on test le non alignement des TS (gen_ts(5))
-
             # ----------------------------
             # Argument `nb_clusters`
             # ----------------------------
@@ -307,7 +243,7 @@ class TestKmeansOnTS(unittest.TestCase):
         # Used for reproducible results
         rand_state = 1
         # TS creation
-        my_ts = gen_ts(1)
+        my_ts = gen_ts(2)
 
         # Get the tsuid list
         tsuid_list = [x['tsuid'] for x in my_ts]
@@ -342,7 +278,7 @@ class TestKmeansOnTS(unittest.TestCase):
         # Used for reproducible results
         rand_state = 1
         # TS creation
-        my_ts = gen_ts(1)
+        my_ts = gen_ts(2)
 
         # Get the tsuid list
         tsuid_list = [x['tsuid'] for x in my_ts]
@@ -376,8 +312,7 @@ class TestKmeansOnTS(unittest.TestCase):
         # Used for reproducible results
         rand_state = 1
         # TS creation
-        my_ts = gen_ts(0)
-
+        my_ts = gen_ts(1)
         try:
             # Fit the model
             result_sklearn = fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=False, random_state=rand_state)
@@ -405,5 +340,25 @@ class TestKmeansOnTS(unittest.TestCase):
             condition = condition_same_labels or condition_switched_labels
             self.assertTrue(condition, msg=msg)
 
+        finally:
+            self.clean_up_db(my_ts)
+
+    def test_alignment_time_series(self):
+        """
+        Test the behavior of the function fit_kmeans_on_ts() when the time series are not aligned. It means they don't
+        have the same start date and/or end date and/or period.
+        """
+        # Used for reproducible results
+        rand_state = 1
+        # TS creation
+        my_ts = gen_ts(4)
+        try:
+            msg = "ERROR: The time series are not aligned - {} mode"
+            # Test on scikit-learn mode
+            with self.assertRaises(ValueError, msg=msg.format("scikit-learn")):
+                fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=False, random_state=rand_state)
+            # Test on Spark mode
+            with self.assertRaises(ValueError, msg=msg.format("Spark")):
+                fit_kmeans_on_ts(ts_list=my_ts, nb_clusters=2, spark=True, random_state=rand_state)
         finally:
             self.clean_up_db(my_ts)
