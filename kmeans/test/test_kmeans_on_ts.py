@@ -45,48 +45,141 @@ def gen_ts(ts_id):
     """
     # Build TS identifier
     fid = 'UNIT_TEST_K-MEANS_%s' % ts_id
+
     # -----------------------------------------------------------------------------
     # CASE 1: 4 TS divided in 2 groups of 2 with 2 points per TS. shape = (4, 2, 2)
     # -----------------------------------------------------------------------------
     if ts_id == 1:
-        ts_a1 = np.array(([10000, 7], [11000, 3]))
-        ts_a2 = np.array(([10000, 9], [11000, 4]))
-        ts_b1 = np.array(([10000, 14], [11000, 15]))
-        ts_b2 = np.array(([10000, 12], [21000, 17]))
-        ts_content = np.array([ts_a1, ts_a2, ts_b1, ts_b2], np.float64)
+        # Number of times
+        n_times = 2
+        # Get timestamps
+        time1 = np.arange(14879030000, 14879030000 + (n_times * 1000), 1000)
+
+        # Get data
+        ts_a1 = [7, 3]
+        ts_a2 = [9, 4]
+        ts_b1 = [14, 15]
+        ts_b2 = [12, 17]
+        ts_content = np.array([np.array([time1, ts_a1]).T,
+                               np.array([time1, ts_a2]).T,
+                               np.array([time1, ts_b1]).T,
+                               np.array([time1, ts_b2]).T], np.float64)
+        # shape = (4, 2, 2)
+
     # -------------------------------------------------------------------------------
     # CASE 2: 4 TS divided in 2 groups of 2 with 10 points per TS. shape = (4, 10, 2)
     # -------------------------------------------------------------------------------
     elif ts_id == 2:
-        ts_a1 = np.array(([10000, 7], [11000, 3], [12000, 4], [13000, 9], [14000, 5], [15000, 6], [16000, 1],
-                          [17000, 0], [18000, 1], [19000, 2]))
-        ts_a2 = np.array(([10000, 6], [11000, 5], [12000, 5], [13000, 7], [14000, 6], [15000, 5], [16000, 2],
-                          [17000, 1], [18000, 2], [19000, 1]))
-        ts_b1 = np.array(([10000, 14], [11000, 13], [12000, 15], [13000, 15], [14000, 20], [15000, 30], [16000, 42],
-                          [17000, 43], [18000, 47], [19000, 50]))
-        ts_b2 = np.array(([10000, 12], [11000, 10], [12000, 14], [13000, 18], [14000, 19], [15000, 26], [16000, 41],
-                          [17000, 45], [18000, 46], [19000, 51]))
-        ts_content = np.array([ts_a1, ts_a2, ts_b1, ts_b2], np.float64)
+        # Number of ts
+        n_ts = 4
+        # Number of times
+        n_times = 10
+        # Get timestamps
+        time1 = np.arange(14879030000, 14879030000 + (n_times * 1000), 1000)
+
+        # Get data
+        values = np.array([np.array([7, 3, 4, 9, 5, 6, 1, 0, 1, 2]),
+                           np.array([6, 5, 5, 7, 6, 5, 2, 1, 2, 1]),
+                           np.array([14, 13, 15, 15, 20, 30, 42, 43, 47, 50]),
+                           np.array([12, 10, 14, 18, 19, 26, 41, 45, 46, 51])])
+        # shape = (4, 10) = (n_ts, n_times)
+
+        # Build TS data
+        # ---------------
+        ts_content = []
+        for ts in range(n_ts):
+            ts_content.append(np.array([time1, values[ts, :]]).T)
+            # ts_content.shape = (n_ts, n_times, 2) = (4, 10, 2)
+
+        ts_content = np.array(ts_content, np.float64)
+        # shape = (4, 10, 2)
+
     # -----------------------------------------------------------------------------
     # CASE 3: 6 TS divided in 3 groups of 2 with 2 points per TS. shape = (6, 2, 2)
     # -----------------------------------------------------------------------------
     elif ts_id == 3:
-        ts_a1 = np.array(([10000, 7], [11000, 3]))
-        ts_a2 = np.array(([10000, 9], [11000, 4]))
-        ts_b1 = np.array(([10000, 14], [11000, 15]))
-        ts_b2 = np.array(([10000, 12], [11000, 17]))
-        ts_c1 = np.array(([10000, 26], [11000, 4]))
-        ts_c2 = np.array(([10000, 24], [11000, 2]))
-        ts_content = np.array([ts_a1, ts_a2, ts_b1, ts_b2, ts_c1, ts_c2], np.float64)
+
+        # Number of ts
+        n_ts = 6
+        # Number of times
+        n_times = 2
+        # Get timestamps
+        time1 = np.arange(14879030000, 14879030000 + (n_times * 1000), 1000)
+
+        # Get data
+        values = np.array([np.array([7, 3]),
+                           np.array([9, 4]),
+                           np.array([14, 15]),
+                           np.array([12, 17]),
+                           np.array([26, 4]),
+                           np.array([24, 2])])
+        # shape = (6, 2) = (n_ts, n_times)
+
+        # Build TS data
+        # ---------------
+        ts_content = []
+        for ts in range(n_ts):
+            ts_content.append(np.array([time1, values[ts, :]]).T)
+            # ts_content.shape = (n_ts, n_times, 2) = (6, 2, 2)
+
+        ts_content = np.array(ts_content, np.float64)
+        # shape = (6, 2, 2)
+
     # ---------------------------------------------------------------------------------
     # CASE 4: non aligned TS to be used in the test test_alignment(). shape = (4, 2, 2)
     # ---------------------------------------------------------------------------------
     elif ts_id == 4:
-        ts_a1 = np.array(([10000, 7], [11000, 3]))
-        ts_a2 = np.array(([20000, 9], [21000, 4]))
-        ts_b1 = np.array(([10000, 14], [11000, 15]))
-        ts_b2 = np.array(([40000, 12], [50000, 17]))
-        ts_content = np.array([ts_a1, ts_a2, ts_b1, ts_b2], np.float64)
+        # Gap between the 2 TS
+        gap = 1000
+
+
+        # Number of ts
+        n_ts = 4
+        # Number of times
+        n_times = 2
+        # Get timestamps
+        time1 = list(range(14879030000 + gap, 14879030000 + gap + (n_times * 1000), 1000))
+        time2 = np.arange(14879030000, 14879030000 + (n_times * 1000), 1000)
+
+
+        # Get data
+        values = np.array([np.array([7, 3]),
+                           np.array([9, 4]),
+                           np.array([14, 15]),
+                           np.array([12, 17])])
+        # shape = (4, 2) = (n_ts, n_times)
+
+        # Build TS data
+        # ---------------
+        ts_content = []
+        for ts in range(n_ts):
+            ts_content.append(np.array([time1, values[ts, :]]).T)
+            # ts_content.shape = (n_ts, n_times, 2) = (4, 2, 2)
+
+        ts_content = np.array(ts_content, np.float64)
+        # shape = (4, 2, 2)
+        # CASE: 2 TS not aligned : not the same start date
+
+        # Number of times
+        n_times = 5
+
+        # Get timestamps
+        # ---------------
+        # Gap between the 2 TS
+        gap = 1000
+
+        time1 = list(range(14879030000 + gap, 14879030000 + gap + (n_times * 1000), 1000))
+        time2 = list(range(14879030000, 14879030000 + (n_times * 1000), 1000))
+
+        # Get values
+        value = [1., 2., 3., 4., 4.]
+        # shape = (n_ts, n_times)
+
+        # Build TS data
+        # ---------------
+        ts_content = np.array([np.array([time1, value]).T,
+                               np.array([time2, value]).T])
+        # ts_content.shape = (n_ts, n_times, 2) = (2, 5, 2)
     else:
         raise NotImplementedError
     # ---------------------------------------------------------------------------------
@@ -97,12 +190,13 @@ def gen_ts(ts_id):
 
         # `fid` must be unique for each TS
         current_fid = fid + '_TS_' + str(i + 1)
+
         # Create TS
         my_ts = IkatsApi.ts.create(fid=current_fid, data=np.array(ts_content)[i, :, :])
-        # Create metadatas 'qual_nb_points', 'name' and 'funcId'
-        IkatsApi.md.create(tsuid=my_ts['tsuid'], name='qual_nb_points', value=len(ts_content), force_update=True)
-        IkatsApi.md.create(tsuid=my_ts['tsuid'], name='qual_ref_period', value=1, force_update=True)
-        IkatsApi.md.create(tsuid=my_ts['tsuid'], name='funcId', value=current_fid, force_update=True)
+
+        # Create metadata 'qual_ref_period'
+        IkatsApi.md.create(tsuid=my_ts['tsuid'], name='qual_ref_period', value=100, force_update=True)
+
         if not my_ts['status']:
             raise SystemError("Error while creating TS %s" % ts_id)
         # Create a list of lists of TS (dicts)
@@ -124,7 +218,6 @@ class TestKmeansOnTS(unittest.TestCase):
             # Delete created TS
             IkatsApi.ts.delete(tsuid=ts_item['tsuid'], no_exception=True)
 
-    @unittest.skip
     def test_arguments_fit_kmeans_on_ts(self):
         """
         Test the behaviour when wrong arguments are given on fit_fit_kmeans_on_ts()
@@ -198,7 +291,6 @@ class TestKmeansOnTS(unittest.TestCase):
     # ------------------ #
     # OUTPUTS TYPE TESTS #
     # ------------------ #
-    @unittest.skip
     def test_kmeans_sklearn_output_type(self):
         """
         Test the 'type' of the results for the sklearn version of the K-means algorithm on time series
@@ -269,7 +361,6 @@ class TestKmeansOnTS(unittest.TestCase):
         finally:
             self.clean_up_db(my_ts)
 
-    # @unittest.skip
     def test_kmeans_spark_result(self):
         """
         Test the result obtained for the sklearn version of the K-means algorithm on time series
