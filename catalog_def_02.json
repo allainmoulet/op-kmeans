@@ -32,7 +32,7 @@
       "name": "result",
       "label": "Result",
       "description": "K-means Clustering results",
-      "type": "KMeans_result"
+      "type": "kmeans_mds"
     }
   ]
 }
