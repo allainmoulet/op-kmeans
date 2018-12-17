@@ -9,7 +9,7 @@
       "name": "pattern_group",
       "label": "Patterns",
       "description": "patterns of sequenced data to clusterize",
-      "type": "pattern_group"
+      "type": "pattern_groups"
     }
   ],
   "parameters": [
