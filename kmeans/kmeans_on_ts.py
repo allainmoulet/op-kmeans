@@ -44,7 +44,7 @@ LOGGER = logging.getLogger(__name__)
         
     ..note::
         The 'qual_ref_period' metadata must be in every time serie's metadata. That means that the user has to run the
-        'Quality Indicators' operator before using this one.
+        'time' part of the 'Quality Indicators' operator before using the K-Means on TS operator.
     
     ..note:: 
         This algorithm is designed for time series. They have to be aligned, that is to say with the same number of
@@ -178,14 +178,9 @@ def fit_kmeans_sklearn_internal(tsuid_list, n_cluster, random_state_kmeans=None)
     If None, the random number generator is the RandomState instance used by np.random
     :type random_state_kmeans: int or NoneType
 
-    :return a tuple of those 2 elements:
-        * model_sklearn: The KMeans model fitted on the input 'ts_list'
-        * result_sklearn: Data frame with indexes, and columns CLUSTER_ID, TSUID, t_0, ..., t_n for the values of time
-        series
-    :rtype
-        * model_sklearn: sklearn.cluster.k_means_.KMeans
-        * result_sklearn: pandas.core.frame.DataFrame
-
+    :return result_sklearn: Data frame with indexes, and columns CLUSTER_ID, TSUID, t_0, ..., t_n for the values of time
+    series
+    :rtype result_sklearn: pandas.core.frame.DataFrame
     """
     LOGGER.info(" --- Starting K-Means fit with scikit-learn --- ")
     try:
@@ -277,6 +272,7 @@ def fit_kmeans_sklearn_internal(tsuid_list, n_cluster, random_state_kmeans=None)
         LOGGER.info("--- Finished to run fit_kmeans_spark_internal() function ---")
 
 
+#  Not used for the moment. See argument 'spark=' of the wrapper fit_kmeans_on_ts() below
 def fit_kmeans_spark_internal(tsuid_list, n_cluster, nb_pt_by_chunk, random_state_kmeans=None):
     """
     The internal wrapper to fit K-means on time series with Spark
@@ -295,13 +291,8 @@ def fit_kmeans_spark_internal(tsuid_list, n_cluster, nb_pt_by_chunk, random_stat
     If None, the random number generator is the RandomState instance used by np.random
     :type random_state_kmeans: int or NoneType
 
-    :return a tuple of those 3 elements:
-        model: The KMeans model fitted on the input 'ts_list'
-        data_df_spark: Data frame with indexes, and columns TSUID, VALUES and CLUSTER
-        centroids_spark: The centroids of each class
-
-    :rtype data_df_spark: pandas.core.frame.DataFrame
-
+    :return result_spark: Data frame with indexes, and columns TSUID, VALUES and CLUSTER
+    :rtype result_spark: pandas.core.frame.DataFrame
     """
     LOGGER.info("--- Starting K-Means fit with Spark ---")
     # -------------------------------------------------------------
@@ -324,7 +315,9 @@ def fit_kmeans_spark_internal(tsuid_list, n_cluster, nb_pt_by_chunk, random_stat
         # Distribute the TS names (tsuid)
         rdd_ts = sc.parallelize(tsuid_list, nb_chunks)
 
-        # 1/ Read entire TS, and put each TS into one DenseVector (1 TS per Vector)
+        # --------------------------------------------------------------------------
+        # 1 - Read entire TS, and put each TS into one DenseVector (1 TS per Vector)
+        # --------------------------------------------------------------------------
         def __map_extract(chunked_tsuid_list):
             """
             Extract data corresponding to `tsuid`, and return formatted result.
@@ -374,6 +367,7 @@ def fit_kmeans_spark_internal(tsuid_list, n_cluster, nb_pt_by_chunk, random_stat
         # Fit model with data transformed
         model_spark = kmeans_spark.fit(df_spark)
         LOGGER.info("--- Finished fitting K-Means to data ---")
+
         # --------------------------------
         # 3 - Cluster DATA
         # --------------------------------
@@ -468,7 +462,6 @@ def fit_kmeans_spark_internal(tsuid_list, n_cluster, nb_pt_by_chunk, random_stat
         # 4        0                                          C1   8  3.5
         # 5        1                                          C2  13   16 ...
         # Two last lines: the 2 centroids
-
         return result_spark
     finally:
         LOGGER.info("--- Finished to run fit_kmeans_spark_internal() function ---")
@@ -532,7 +525,6 @@ def mds_representation_kmeans(data, random_state_mds=None):
     # 3           1  5F2C9B00000100076C0000020006E0000003000774 -6.403026  3.706108
     # 4           0                                         C1   5.432918 -4.133372
     # 5           1                                         C2  -5.135109  4.361306
-
     return all_position
 
 
@@ -561,7 +553,6 @@ def format_kmeans(all_positions, n_cluster):
       ...
       }
     }
-
     """
 
     LOGGER.info("--- Exporting results to the wanted format ---")
@@ -583,18 +574,14 @@ def format_kmeans(all_positions, n_cluster):
 
     #  Init result
     result = {}
-
     # For each centroid
     for c in centroids_positions['TSUID']:  # "C1", "C2", ...
-
         # Purpose: CREATE DICT :
         # {'centroid': [x, y],
         #  '*tsuid1*': [x, y],
         #  '*tsuid2*': [x, y]}
         #  Into result['C1']
-
         result[c] = {}
-
         # Get the row of `centroids_positions` containing data about the current centroid
         current_centroid = centroids_positions[centroids_positions["TSUID"] == c]
         # Example :
@@ -633,7 +620,10 @@ def format_kmeans(all_positions, n_cluster):
     return result
 
 
-def fit_kmeans_on_ts(ts_list, nb_clusters, random_state=None, nb_points_by_chunk=50000, spark=None):
+# 2018/12/19: we don't have visualisation for Spark mode because it requires to calculate a distance matrix on
+# Spark. To deal with that, the easiest way is to use only the scikit-learn mode, and so to force this usage with
+# the argument "spark=False". When visu will be available, put spark=None.
+def fit_kmeans_on_ts(ts_list, nb_clusters, random_state=None, nb_points_by_chunk=50000, spark=False):
     """
     Performs K-means algorithm on time series either with Spark either with scikit-learn.
 
@@ -719,9 +709,9 @@ def fit_kmeans_on_ts(ts_list, nb_clusters, random_state=None, nb_points_by_chunk
         result_df = fit_kmeans_sklearn_internal(tsuid_list=tsuid_list,
                                                 n_cluster=nb_clusters,
                                                 random_state_kmeans=random_state)
-    # ------------------------------------
+    # --------------------------------------------------------------------------------------
     # 2 - Compute the MDS (Multidimensional scaling) (purpose : 2 dimensional visualisation)
-    # ------------------------------------
+    # --------------------------------------------------------------------------------------
     # Note that the seed (random_state_mds) is the same
     all_positions = mds_representation_kmeans(data=result_df, random_state_mds=random_state)
     # -----------------------
