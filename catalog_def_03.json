@@ -1,0 +1,32 @@
+{
+  "name": "kmeans_on_ts",
+  "label": "K-Means on TS",
+  "description": "Apply a K-means clustering on time series.",
+  "family": "Data_Modeling__Unsupervised_Learning",
+  "entry_point": "kmeans.kmeans_on_ts::fit_kmeans_on_ts",
+  "inputs": [
+    {
+      "name": "ts_list",
+      "label": "TS list",
+      "description": "List of aligned TS to be clustered",
+      "type": "ts_list"
+    }
+  ],
+  "parameters": [
+    {
+      "name": "nb_clusters",
+      "label": "clusters",
+      "description": "The number of clusters to form, as well as the number of centroids to generate",
+      "type": "number",
+      "default_value": 3
+    }
+  ],
+  "outputs": [
+    {
+      "name": "result",
+      "label": "Result",
+      "description": "K-means Clustering results",
+      "type": "kmeans_mds"
+    }
+  ]
+}
