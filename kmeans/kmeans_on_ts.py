@@ -18,18 +18,20 @@ import time
 import numpy as np
 import pandas as pd
 import logging
+
 from ikats.core.library.spark import SSessionManager, SparkUtils
 from ikats.core.resource.api import IkatsApi
+
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import euclidean_distances
 from sklearn.manifold import MDS
+
 from pyspark.sql.functions import udf, col
 from pyspark.sql.types import ArrayType, DoubleType
 from pyspark.ml.clustering import KMeans as KMeansSpark
 from pyspark.ml.linalg import Vectors
 
 LOGGER = logging.getLogger(__name__)
-
 """
     K-Means Algorithm on Time Series
     ================================
@@ -160,7 +162,7 @@ def _check_alignment(tsuid_list):
             # Compare `period`
             elif period != ref_period:
                 raise ValueError("TS {}, metadata `ref_period` is {}:"
-                                 " not aligned with other TS (expected {})".format(tsuid, ed, ref_period))
+                                 " not aligned with other TS (expected {})".format(tsuid, period, ref_period))
     return ref_sd, ref_ed, nb_points
 
 
@@ -202,17 +204,27 @@ def fit_kmeans_sklearn_internal(tsuid_list, n_cluster, random_state_kmeans=None)
         model_sklearn = KMeans(n_clusters=n_cluster, random_state=random_state_kmeans)
         model_sklearn.fit(data_sklearn)
 
+        # ---------------------------------------------
+        # 3 - Create and add metadatas to the centroids
+        # ---------------------------------------------
         # Retrieve centroids
         centroids_sklearn = model_sklearn.cluster_centers_
         # shape = (n_cluster, n_times)
+
+        metas = IkatsApi.md.read(ts_list=tsuid_list[0])
+        ref_period = metas[tsuid_list[0]]['qual_ref_period']
+        nb_points = metas[tsuid_list[0]]['qual_nb_points']
+
+        # Add the metadatas to the model (needed in order to predict)
+        model_sklearn.metadatas = {'qual_ref_period': ref_period, 'qual_nb_points': nb_points}
 
         # Retrieve cluster_id for each TS
         cluster_id = model_sklearn.labels_
         # shape = (n_ts,)
 
-        # ---------------------
-        # 3 - Reformat data into Pandas Dataframe
-        # ---------------------
+        # ---------------------------------------
+        # 4 - Reformat data into Pandas Dataframe
+        # ---------------------------------------
         # VALUES
         data_df = pd.DataFrame(data_sklearn)
 
@@ -245,7 +257,7 @@ def fit_kmeans_sklearn_internal(tsuid_list, n_cluster, random_state_kmeans=None)
         # ...
 
         # ---------------------
-        # 4 - Concatenate all results into single DF
+        # 5 - Concatenate all results into single DF
         # ---------------------
         # Concatenate these DF by columns
         result_sklearn = pd.concat([cluster_df, data_df], axis=1)
@@ -267,7 +279,7 @@ def fit_kmeans_sklearn_internal(tsuid_list, n_cluster, random_state_kmeans=None)
         # Two last lines: the 2 centroids
         LOGGER.debug(" --- Finished fitting K-Means to data in: %.3f seconds --- ", time.time() - start_loading_time)
         # For now, do not return model
-        return result_sklearn  # model_sklearn
+        return result_sklearn, model_sklearn
     finally:
         LOGGER.info("--- Finished to run fit_kmeans_spark_internal() function ---")
 
@@ -539,8 +551,9 @@ def format_kmeans(all_positions, n_cluster):
     :param n_cluster: the number of clusters to form
     :type n_cluster: int
 
-    :return: dict formatted as shown below, with: tsuid, mds new coordinates of each point, mds centroid coordinates
-    :rtype: dict of dicts
+    :return result: dict formatted as shown below, with: tsuid, mds new coordinates of each point, mds centroid
+    coordinates
+    :rtype result: dict of dicts
 
     ..Example:
     {
@@ -706,9 +719,9 @@ def fit_kmeans_on_ts(ts_list, nb_clusters, random_state=None, nb_points_by_chunk
                                               nb_pt_by_chunk=nb_points_by_chunk,
                                               random_state_kmeans=random_state)
     else:
-        result_df = fit_kmeans_sklearn_internal(tsuid_list=tsuid_list,
-                                                n_cluster=nb_clusters,
-                                                random_state_kmeans=random_state)
+        result_df, model = fit_kmeans_sklearn_internal(tsuid_list=tsuid_list,
+                                                       n_cluster=nb_clusters,
+                                                       random_state_kmeans=random_state)
     # --------------------------------------------------------------------------------------
     # 2 - Compute the MDS (Multidimensional scaling) (purpose : 2 dimensional visualisation)
     # --------------------------------------------------------------------------------------
@@ -720,4 +733,4 @@ def fit_kmeans_on_ts(ts_list, nb_clusters, random_state=None, nb_points_by_chunk
     result = format_kmeans(all_positions=all_positions, n_cluster=nb_clusters)
 
     # For now, model is not outputed. If we do so: return result, model
-    return result
+    return result, model
