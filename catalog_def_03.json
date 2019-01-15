@@ -23,10 +23,16 @@
   ],
   "outputs": [
     {
-      "name": "result",
-      "label": "Result",
+      "name": "clusters",
+      "label": "Clusters",
       "description": "K-means Clustering results",
       "type": "kmeans_mds"
+    },
+    {
+      "name": "model",
+      "label": "Model",
+      "description": "The K-means model",
+      "type": "sk_model"
     }
   ]
 }

@@ -1,0 +1,35 @@
+{
+  "name": "kmeans_on_ts_predict",
+  "label": "K-Means on TS Predict",
+  "description": "Apply predictions on time series data according a given K-means model and displays visualisation of all the curves of the cluster.",
+  "family": "Data_Modeling__Unsupervised_Learning",
+  "entry_point": "kmeans.kmeans_on_ts_predict::kmeans_on_ts_predict",
+  "inputs": [
+    {
+      "name": "clusters",
+      "label": "Clusters",
+      "description": "The K-means result to be used to visualise the curves of the considerer cluster of the new TS given in `TS list` argument",
+      "type": "kmeans_mds"
+    },
+    {
+      "name": "model",
+      "label": "Model",
+      "description": "The K-means model to be used to cluster the TS list",
+      "type": "sk_model"
+    },
+    {
+      "name": "ts_list",
+      "label": "TS list",
+      "description": "List of aligned TS to be clustered according the K-means model given in input",
+      "type": "ts_list"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "predictions_table",
+      "label": "Table",
+      "description": "The table of predictions",
+      "type": "table"
+    }
+  ]
+}

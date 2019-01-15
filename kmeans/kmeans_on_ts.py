@@ -207,16 +207,16 @@ def fit_kmeans_sklearn_internal(tsuid_list, n_cluster, random_state_kmeans=None)
         # ---------------------------------------------
         # 3 - Create and add metadatas to the centroids
         # ---------------------------------------------
+        # Read metadatas from the first TS for example. All the TS are aligned because of step 0.
+        metas = IkatsApi.md.read(ts_list=tsuid_list[0])
+        ref_period = int(float(metas[tsuid_list[0]]['qual_ref_period']))
+        nb_points = int(metas[tsuid_list[0]]['qual_nb_points'])
+        # Add the metadatas to the model (needed in order to predict)
+        model_sklearn.metadatas = {'qual_ref_period': ref_period, 'qual_nb_points': nb_points}
+
         # Retrieve centroids
         centroids_sklearn = model_sklearn.cluster_centers_
         # shape = (n_cluster, n_times)
-
-        metas = IkatsApi.md.read(ts_list=tsuid_list[0])
-        ref_period = metas[tsuid_list[0]]['qual_ref_period']
-        nb_points = metas[tsuid_list[0]]['qual_nb_points']
-
-        # Add the metadatas to the model (needed in order to predict)
-        model_sklearn.metadatas = {'qual_ref_period': ref_period, 'qual_nb_points': nb_points}
 
         # Retrieve cluster_id for each TS
         cluster_id = model_sklearn.labels_
