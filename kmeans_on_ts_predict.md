@@ -8,7 +8,12 @@ published: true
 This IKATS operator implements a K-means predict operator. It is designed for time series and have to be ran after the `K-Means on TS` operator.
 
 ## Input and parameters
-This operator takes three inputs of the functional type : `kmeans_mds`, `sk_model` and `ts_list`.
+This operator takes three inputs of the functional type :
+* `kmeans_mds`: shall be the output called `clusters` of a `kmean_on_ts` operator
+* `sk_model`: shall be the output called `model` of a `kmean_on_ts` operator, trained on an other dataset
+* `ts_list`: a new dataset where the predict is performed.
+
+
 This operator doesn't have any parameter.
 
 ## Output
@@ -23,5 +28,4 @@ The operator has one output:
 ## Implementation remarks
 - The Euclidian distance is used to affect the new time series. The prediction is made by finding the shortest centroids from the considered TS.
 
-## Example
 Return to the [list of all operators](https://ikats.org/operators.html)

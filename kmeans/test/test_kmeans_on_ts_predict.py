@@ -138,7 +138,7 @@ def gen_scenario(case):
             raise SystemError("Error while creating TS %s" % current_fid)
         # Create a list of lists of TS (dicts)
         my_new_ts.append({'tsuid': created_ts['tsuid'], 'funcId': created_ts['funcId'], 'ts_content': ts_2})
-        
+
     # ----------------------------------------------------------------------------------
     # CASE 3: Abnormal case - TS don't have the same number of points between themselves
     # ----------------------------------------------------------------------------------

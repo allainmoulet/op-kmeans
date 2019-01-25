@@ -50,7 +50,7 @@ LOGGER = logging.getLogger(__name__)
     Here are the improvements that can be performed:
         * DTW distance can replace Euclidian one. In that case, we don't need anymore the TS to have the same number of
         points. 
-        * When Spark models' stockage in IKATS will be available, the Spark part of the 'K-Means on TS' operator will be
+        * When Spark models' storage in IKATS will be available, the Spark part of the 'K-Means on TS' operator will be
         implemented. This 'K-Means on TS Predict' operator as well. The choice of usage of Spark here will be totally
         determined by the class model used in the 'K-Means on TS'.
     """
@@ -133,6 +133,17 @@ def kmeans_predict_sklearn_internal(result, model, tsuid_list):
 
     :param result: The result obtained as output of the K-Means on TS operator. Used for visualisation.
     :type result: dict of dict
+    ..Example:
+        {
+      'C1': {
+       'centroid': [x, y],
+       '*tsuid1*': [x, y],
+       '*tsuid2*': [x, y]
+      },
+      'C2': {
+      ...
+      }
+    }
 
     :param model: The sklearn K-Means model to be used to cluster the new time series
     :type model: sklearn.cluster.k_means
@@ -192,7 +203,7 @@ def kmeans_predict_sklearn_internal(result, model, tsuid_list):
         # -------------------------------------------------------------
         # 1 - Process the data in the shape needed by sklearn's K-Means
         # -------------------------------------------------------------
-        # Extract data (just data values, not timestamps)
+        # Extract input data (just data values, not timestamps)
         data_sklearn = np.array(IkatsApi.ts.read(tsuid_list))[:, :, 1]
         # Shape = (n_ts, n_times)
 
@@ -264,6 +275,17 @@ def kmeans_on_ts_predict(result, model, ts_list):
 
     :param result: The result obtained as output of the K-Means on TS operator. Used for visualisation.
     :type result: dict of dicts
+        ..Example:
+        {
+      'C1': {
+       'centroid': [x, y],
+       '*tsuid1*': [x, y],
+       '*tsuid2*': [x, y]
+      },
+      'C2': {
+      ...
+      }
+    }
 
     :param model: The K-Means model to be used to cluster the new time series
     :type model: sklearn.cluster.k_means
@@ -307,5 +329,5 @@ def kmeans_on_ts_predict(result, model, ts_list):
     # elif model.__module__ == 'pyspark.ml.clustering.KMeansModel':
     #     predictions_table = kmeans_predict_spark_internal(model=model, tsuid_list=tsuid_list)
     else:
-        raise NotImplementedError
+        raise NotImplementedError("Version using SPARK mode not yet implemented")
     return predictions_table
