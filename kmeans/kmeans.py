@@ -351,4 +351,4 @@ def fit_kmeans(sax, n_cluster=3, random_state=None):
     #
     k_means = format_kmeans(centers_pos=centers_pos, pos=pos, tsuid_list=list(paa.keys()), model=model)
 
-    return model, k_means
+    return k_means, model
