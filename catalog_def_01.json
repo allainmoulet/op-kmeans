@@ -23,16 +23,16 @@
   ],
   "outputs": [
     {
+      "name": "clusters",
+      "label": "Clusters",
+      "description": "K-means Clustering results",
+      "type": "kmeans_mds"
+    },
+    {
       "name": "model",
       "label": "Model",
       "description": "The computed KMeans model",
       "type": "sk_model"
-    },
-    {
-      "name": "result",
-      "label": "Result",
-      "description": "K-means Clustering results",
-      "type": "kmeans_mds"
     }
   ]
 }
