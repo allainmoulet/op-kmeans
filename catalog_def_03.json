@@ -1,20 +1,20 @@
 {
-  "name": "kmeans",
-  "label": "K-Means on SAX",
-  "description": "Apply a K-means clustering on the results of a SAX algorithm",
+  "name": "kmeans_on_ts",
+  "label": "K-Means on TS",
+  "description": "Apply a K-means clustering on time series.",
   "family": "Data_Modeling__Unsupervised_Learning",
-  "entry_point": "kmeans.kmeans::fit_kmeans",
+  "entry_point": "kmeans.kmeans_on_ts::fit_kmeans_on_ts",
   "inputs": [
     {
-      "name": "sax",
-      "label": "SAX",
-      "description": "SAX result to clusterize",
-      "type": "SAX_result"
+      "name": "ts_list",
+      "label": "TS list",
+      "description": "List of aligned TS to be clustered",
+      "type": "ts_list"
     }
   ],
   "parameters": [
     {
-      "name": "n_cluster",
+      "name": "nb_clusters",
       "label": "clusters",
       "description": "The number of clusters to form, as well as the number of centroids to generate",
       "type": "number",
@@ -31,7 +31,7 @@
     {
       "name": "model",
       "label": "Model",
-      "description": "The computed KMeans model",
+      "description": "The K-means model",
       "type": "sk_model"
     }
   ]

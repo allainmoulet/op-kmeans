@@ -1,5 +1,5 @@
 """
-Copyright 2018 CS Systèmes d'Information
+Copyright 2018-2019 CS Systèmes d'Information
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -351,4 +351,4 @@ def fit_kmeans(sax, n_cluster=3, random_state=None):
     #
     k_means = format_kmeans(centers_pos=centers_pos, pos=pos, tsuid_list=list(paa.keys()), model=model)
 
-    return model, k_means
+    return k_means, model
